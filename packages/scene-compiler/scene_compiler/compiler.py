@@ -58,6 +58,7 @@ def compile_scene(archetype: Archetype, plan: ScenePlan) -> dict:
         entities.append(_door_entity(i + 1, exit_spec["direction"]))
 
     return {
+        "archetypeId": archetype.archetypeId,
         "sceneId": plan.sceneId,
         "generationId": plan.generationId,
         "setting": plan.setting,
