@@ -15,6 +15,9 @@ venv/
 .vscode/
 *.log
 
+# SQLite artifacts
+*.db*
+
 # 环境与密钥
 .env
 .env.*
