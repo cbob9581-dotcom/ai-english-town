@@ -58,6 +58,7 @@ export const ScenePlanSchema = z.object({
   exits: z.array(z.unknown()).default([]),
 });
 
+export type EntityKind = z.infer<typeof EntityKindSchema>;
 export type Entity = z.infer<typeof EntitySchema>;
 export type Archetype = z.infer<typeof ArchetypeSchema>;
 export type ScenePlan = z.infer<typeof ScenePlanSchema>;
