@@ -1,0 +1,20 @@
+# Node
+node_modules/
+dist/
+build/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 工具
+.superpowers/
+.idea/
+.vscode/
+*.log
+
+# 环境与密钥
+.env
+.env.*
