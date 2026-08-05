@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://english-town.local/schemas/archetype.schema.json",
+  "title": "Archetype",
+  "type": "object",
+  "required": ["archetypeId", "displayName", "background", "zones", "propSlots", "npcSlots", "exits"],
+  "properties": {
+    "archetypeId": { "type": "string" },
+    "displayName": { "type": "string" },
+    "background": {
+      "type": "object", "required": ["style", "gradient", "decor", "ambienceKey"],
+      "properties": {
+        "style": { "const": "gradient" },
+        "gradient": { "type": "string" },
+        "decor": { "type": "array", "items": { "type": "string" } },
+        "ambienceKey": { "type": "string" }
+      }
+    },
+    "zones": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object", "required": ["x", "y", "anchor"],
+        "properties": {
+          "x": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "integer", "minimum": 0, "maximum": 1000 } },
+          "y": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "integer", "minimum": 0, "maximum": 1000 } },
+          "anchor": { "enum": ["bottom", "center", "top"] }
+        }
+      }
+    },
+    "propSlots": {
+      "type": "array",
+      "items": { "type": "object", "required": ["slotId", "zone", "categories"], "properties": { "slotId": { "type": "string" }, "zone": { "type": "string" }, "categories": { "type": "array", "items": { "type": "string" } } } }
+    },
+    "npcSlots": {
+      "type": "array",
+      "items": { "type": "object", "required": ["slotId", "zone", "role"], "properties": { "slotId": { "type": "string" }, "zone": { "type": "string" }, "role": { "type": "string" } } }
+    },
+    "exits": {
+      "type": "array",
+      "items": { "type": "object", "required": ["direction", "targetKind"], "properties": { "direction": { "enum": ["left", "right"] }, "targetKind": { "type": "string" } } }
+    }
+  }
+}

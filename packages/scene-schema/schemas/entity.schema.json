@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://english-town.local/schemas/entity.schema.json",
+  "title": "Entity",
+  "type": "object",
+  "required": ["id", "component", "layout", "appearance", "semantics"],
+  "properties": {
+    "id": { "type": "string" },
+    "component": { "enum": ["image", "label", "npc", "companion", "prop", "door", "dialogue-zone", "ambient-audio"] },
+    "layout": {
+      "type": "object", "required": ["x", "y", "w", "h", "anchor"],
+      "properties": {
+        "x": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "y": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "w": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "h": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "anchor": { "enum": ["bottom", "center", "top"] }
+      }
+    },
+    "appearance": {
+      "type": "object", "required": ["visualKey"],
+      "properties": { "visualKey": { "type": "string", "pattern": "^[a-z0-9]+\\.[a-z0-9]+$" } }
+    },
+    "semantics": {
+      "type": "object", "required": ["name"],
+      "properties": {
+        "name": { "type": "string" },
+        "wordId": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "interactions": { "type": "array", "items": { "enum": ["focus", "ask", "inspect", "pick"] } }
+  }
+}
