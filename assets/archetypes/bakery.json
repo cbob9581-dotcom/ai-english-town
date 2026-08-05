@@ -1,0 +1,22 @@
+{
+  "archetypeId": "bakery",
+  "displayName": "面包店",
+  "background": {
+    "style": "gradient",
+    "gradient": "linear-gradient(#ffe8c8 0%, #ffd9a0 55%, #a9744b 56%, #8a5a34 100%)",
+    "decor": ["window", "shelf", "hanging-sign"],
+    "ambienceKey": "ambience/bakery_loop.ogg"
+  },
+  "zones": {
+    "counter": { "x": [320, 700], "y": [600, 820], "anchor": "bottom" },
+    "shelf":   { "x": [60, 260],  "y": [180, 520], "anchor": "center" },
+    "door":    { "x": [860, 980], "y": [280, 820], "anchor": "bottom" }
+  },
+  "propSlots": [
+    { "slotId": "counter.main", "zone": "counter", "categories": ["food", "product", "paper"] },
+    { "slotId": "counter.side", "zone": "counter", "categories": ["drink", "food", "paper"] },
+    { "slotId": "shelf.top",    "zone": "shelf",   "categories": ["container", "decoration"] }
+  ],
+  "npcSlots": [ { "slotId": "vendor", "zone": "counter", "role": "vendor" } ],
+  "exits": [ { "direction": "left", "targetKind": "any" }, { "direction": "right", "targetKind": "any" } ]
+}

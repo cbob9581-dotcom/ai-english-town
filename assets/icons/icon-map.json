@@ -1,0 +1,11 @@
+{
+  "food.loaf":    { "emoji": "🍞", "label": "loaf" },
+  "food.apple":   { "emoji": "🍎", "label": "apple" },
+  "paper.receipt":{ "emoji": "🧾", "label": "receipt" },
+  "npc.vendor":   { "emoji": "👩‍🍳", "label": "vendor" },
+  "companion.fox":{ "emoji": "🦊", "label": "companion" },
+  "door.wooden":  { "emoji": "🚪", "label": "door" },
+  "decor.window": { "emoji": "🌞", "label": "window" },
+  "decor.shelf":  { "emoji": "🪵", "label": "shelf" },
+  "decor.sign":   { "emoji": "☕", "label": "sign" }
+}

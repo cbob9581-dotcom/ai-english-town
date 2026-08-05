@@ -1,0 +1,14 @@
+[project]
+name = "scene-compiler"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["scene-schema"]
+
+[tool.uv.sources]
+scene-schema = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["scene_compiler"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

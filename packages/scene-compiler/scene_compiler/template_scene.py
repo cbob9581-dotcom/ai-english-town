@@ -1,0 +1,23 @@
+"""阶段 1 固定场景：面包店。后续阶段由 Scene Director（云端）产出此文档。"""
+
+TEMPLATE_SCENE_ID = "scene_bakery_001"
+
+
+def template_scene_plan() -> dict:
+    return {
+        "schemaVersion": "1.0",
+        "sceneId": TEMPLATE_SCENE_ID,
+        "generationId": "gen_bakery_001",
+        "revision": 1,
+        "mode": "free",
+        "archetypeId": "bakery",
+        "setting": {"displayName": "Rosewood Bakery", "time": "morning"},
+        "fills": [
+            {"slotId": "counter.main", "entity": {"id": "loaf-1", "component": "prop", "layout": {"x": 400, "y": 620, "w": 90, "h": 70, "anchor": "bottom"}, "appearance": {"visualKey": "food.loaf"}, "semantics": {"name": "loaf", "wordId": "word_loaf_n_1"}, "interactions": ["focus", "ask"]}},
+            {"slotId": "counter.side", "entity": {"id": "apple-1", "component": "prop", "layout": {"x": 540, "y": 630, "w": 80, "h": 60, "anchor": "bottom"}, "appearance": {"visualKey": "food.apple"}, "semantics": {"name": "apple", "wordId": "word_apple_n_1"}, "interactions": ["focus", "ask"]}},
+            {"slotId": "counter.side", "entity": {"id": "receipt-1", "component": "prop", "layout": {"x": 620, "y": 640, "w": 60, "h": 50, "anchor": "bottom"}, "appearance": {"visualKey": "paper.receipt"}, "semantics": {"name": "receipt", "wordId": "word_receipt_n_1"}, "interactions": ["focus", "ask"]}},
+        ],
+        "characters": [{"slotId": "vendor", "npcId": "npc_rosa"}],
+        "objectives": [],
+        "exits": [],
+    }
