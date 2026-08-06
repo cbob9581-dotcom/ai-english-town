@@ -1,0 +1,14 @@
+[project]
+name = "asr-worker"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["fastapi", "uvicorn", "faster-whisper", "scene-schema"]
+
+[tool.uv.sources]
+scene-schema = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["asr_worker"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
