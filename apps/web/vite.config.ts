@@ -1,5 +1,5 @@
 import { fileURLToPath, URL } from 'node:url';
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
 // exFAT 不支持目录符号链接/junction，pnpm 的 workspace:* 无法安装到 node_modules。

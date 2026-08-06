@@ -1,4 +1,4 @@
-import type { CSSProperties, JSX } from 'react';
+import type { CSSProperties } from 'react';
 import { useRef, useState } from 'react';
 import type { Entity } from './types';
 import { ensureMinHit, mapLogicalToCss } from './coords';
@@ -26,7 +26,7 @@ export function SceneViewport({ scene, onEntityClick }: Props) {
       {scene.entities.map((entity) => {
         const css = ensureMinHit(mapLogicalToCss(entity.layout.x, entity.layout.y, entity.layout.w, entity.layout.h, size.w, size.h));
         return (
-          <div key={entity.id} style={{ position: 'absolute', ...css }} data-entity={entity.id}>
+          <div key={entity.id} style={{ position: 'absolute', ...css }} data-entity={entity.id} onClick={() => onEntityClick?.(entity)}>
             {renderEntity(entity)}
           </div>
         );
