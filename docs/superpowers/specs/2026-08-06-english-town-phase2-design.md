@@ -120,7 +120,7 @@ CREATE INDEX IF NOT EXISTS idx_llm_calls_session ON llm_calls(session_id, create
 ASR final（untrusted）
   → prompt 构造：trusted 系统人格(Rosa/面包店/教学等级) + untrusted 数据(最近对话轮次、场景实体名、用户文本，结构化字段)
   → client.stream_text(messages)              [connect 1.5s / ttft 2.0s / total 3.0s；连接错误重试 1 次]
-  → chunker：delta 累积 → 句子块（句号/问号/叹号 + ≥8 词才发；20 词强制断句）
+  → chunker：delta 累积 → 句子块（句号/问号/叹号处切句、完整短句照发；20 词强制断句、词边界不断词）
   → 每句：校验 → 发 npc.speech.delta → 逐句 TTS → tts.audio.start/audio/end（chunkId 递增）
   → 流结束：npc.speech.commit（全文，幂等）→ lexmatch 派生 candidateWordIds → npc.turn.metadata
   → 超时 / 校验失败 / 网络错误 / length_truncated → 降级 scripted_npc（发单句 commit + metadata）
@@ -306,7 +306,7 @@ Rosa (interrupted after 1.8s): "The loaf is three dollars. Would you like..."
 | 校验失败（超长/非法字符）→ 降级，不截断 | too_long |
 | 流中途 `length_truncated` → 降级 | truncated |
 | `lexmatch` 单测（loaf/loaves、apple/apples、无匹配→[]） | —（纯函数） |
-| `chunker` 单测（≥8 词才发、20 词强断、finalize 余量） | —（纯函数） |
+| `chunker` 单测（按句切分、短句照发、20 词强断、finalize 余量） | —（纯函数） |
 | Tutor：缓存命中 0 LLM 0 TTS | ok |
 | Tutor：scaffold 不含目标词 → 只读单词降级 | bad_word_id / missing_word |
 | Tutor：invalid_json → 降级 | invalid_json |
