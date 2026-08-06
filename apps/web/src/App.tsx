@@ -9,7 +9,7 @@ export default function App() {
   const [scene, setScene] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [focusWord, setFocusWord] = useState<string | null>(null);
-  const { micOn, status, turns, start, stop, beginUtterance, interrupt } = useVoiceRound('sess-1', `ws://${location.hostname}:8000/ws/sessions/sess-1`);
+  const { micOn, status, turns, start, stop, beginUtterance, interrupt, askCompanion } = useVoiceRound('sess-1', `ws://${location.hostname}:8000/ws/sessions/sess-1`);
 
   useEffect(() => {
     fetchScene('scene_bakery_001').then(setScene).catch((e) => setError(String(e)));
@@ -31,7 +31,7 @@ export default function App() {
         <SceneViewport scene={scene} onEntityClick={(e) => setFocusWord(e.semantics.name)} />
       </div>
       <DialogueDock turns={turns} status={status} />
-      {focusWord && <CompanionPopover word={focusWord} onAsk={(w) => alert(`(阶段1占位) 伴学者读：${w}`)} onClose={() => setFocusWord(null)} />}
+      {focusWord && <CompanionPopover word={focusWord} onAsk={askCompanion} onClose={() => setFocusWord(null)} />}
     </div>
   );
 }
