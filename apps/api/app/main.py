@@ -8,7 +8,7 @@ from app.settings import Settings
 
 
 def create_app(events: EventStore | None = None, settings: Settings | None = None) -> FastAPI:
-    settings = settings or Settings()
+    settings = settings or Settings.from_env()
     events = events or EventStore(settings.db_path)
     scenes = SceneStore(settings.asset_root)
 
