@@ -18,3 +18,19 @@ def test_sentence_boundaries_are_respected() -> None:
     chunks = chunk_sentences(text)
     # 首块吸收后续句子补足字数，剩余按句切分
     assert all(chunk.strip().endswith(".") for chunk in chunks)
+
+
+def test_empty_and_whitespace_text_returns_empty_list() -> None:
+    assert chunk_sentences("") == []
+    assert chunk_sentences("   ") == []
+
+
+def test_multi_chunk_forces_recursive_branch() -> None:
+    text = ("Hi. My name is Rosa. I run this bakery. "
+            "We bake bread daily. You can ask me anything. Have a nice day.")
+    chunks = chunk_sentences(text)
+    assert len(chunks) > 1
+    # 递归分支仍按句切分，不按词
+    assert all(c.strip().endswith(".") for c in chunks)
+    # 不丢词
+    assert "".join(chunks).split() == text.split()

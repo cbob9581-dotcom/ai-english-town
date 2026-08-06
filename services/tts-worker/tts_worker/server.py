@@ -29,9 +29,11 @@ class TTSRequest(BaseModel):
 
 @app.post("/tts")
 def synthesize(req: TTSRequest) -> dict:
+    if not req.text.strip():
+        return {"audioBase64": "", "ms": 0, "sampleRate": 0, "chunks": 0}
     start = time.perf_counter()
     chunks = chunk_sentences(req.text)
-    audio = b"".join(ENGINE.synthesize(c) for c in chunks)  # type: ignore[union-attr]
+    audio = b"".join(ENGINE.synthesize(c, voice=req.voice) for c in chunks)  # type: ignore[union-attr]
     ms = int((time.perf_counter() - start) * 1000)
     with wave.open(io.BytesIO(audio), "rb") as w:
         sr = w.getframerate()
