@@ -55,6 +55,8 @@
 `apps/api/tests/test_llm_log.py`：
 
 ```python
+from pathlib import Path
+
 import pytest
 
 from app.event_store import EventStore
@@ -79,7 +81,7 @@ def test_settings_llm_defaults() -> None:
     assert s.llm_max_tokens_tutor == 320
     assert s.llm_session_call_cap == 200
     assert s.llm_concurrency_limit == 2
-    assert s.tutor_cache_dir == __import__("pathlib").Path("data/tutor-audio")
+    assert s.tutor_cache_dir == Path("data/tutor-audio")
 
 
 def test_settings_from_env_override(monkeypatch) -> None:
