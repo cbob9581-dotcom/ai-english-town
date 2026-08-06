@@ -16,6 +16,9 @@ def create_app(events: EventStore | None = None, settings: Settings | None = Non
     app.state.events = events
     app.state.settings = settings
 
+    from app.ws import router as ws_router
+    app.include_router(ws_router)
+
     @app.get("/health")
     def health() -> dict:
         return {"status": "ok", "archetypeCount": len(scenes.list_archetype_ids())}

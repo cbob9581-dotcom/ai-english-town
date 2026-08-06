@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react';
 import { fetchScene } from './api';
 import { SceneViewport } from './SceneViewport';
+import { DialogueDock } from './DialogueDock';
+import { useVoiceRound } from './useVoiceRound';
+import { CompanionPopover } from './CompanionPopover';
 
 export default function App() {
   const [scene, setScene] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [focusWord, setFocusWord] = useState<string | null>(null);
+  const { micOn, status, turns, start, stop, beginUtterance, interrupt } = useVoiceRound('sess-1', `ws://${location.hostname}:8000/ws/sessions/sess-1`);
 
   useEffect(() => {
     fetchScene('scene_bakery_001').then(setScene).catch((e) => setError(String(e)));
@@ -18,11 +23,15 @@ export default function App() {
       <header style={{ padding: '8px 16px', display: 'flex', gap: 16, alignItems: 'center' }}>
         <strong>{scene.setting.displayName}</strong>
         <span>{scene.setting.time}</span>
-        <span>自由模式</span>
+        <button onClick={micOn ? stop : start}>{micOn ? '停止' : '开始语音'}</button>
+        <button onClick={beginUtterance} disabled={!micOn}>按住说话</button>
+        <button onClick={interrupt}>打断</button>
       </header>
-      <div style={{ flex: 1, padding: 16 }}>
-        <SceneViewport scene={scene} />
+      <div style={{ flex: 1, padding: 16, position: 'relative' }}>
+        <SceneViewport scene={scene} onEntityClick={(e) => setFocusWord(e.semantics.name)} />
       </div>
+      <DialogueDock turns={turns} status={status} />
+      {focusWord && <CompanionPopover word={focusWord} onAsk={(w) => alert(`(阶段1占位) 伴学者读：${w}`)} onClose={() => setFocusWord(null)} />}
     </div>
   );
 }
