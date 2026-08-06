@@ -20,5 +20,5 @@ _FALLBACK = {"speech": FALLBACK_LINES[0], "gesture": {"type": "shake"}, "candida
 def reply(utterance: str) -> dict:
     for pattern, text, candidate_word_ids in _PATTERNS:
         if pattern.search(utterance):
-            return {"speech": text, "gesture": {"type": "nod"}, "candidateWordIds": candidate_word_ids}
+            return {"speech": text, "gesture": {"type": "nod"}, "candidateWordIds": list(candidate_word_ids)}
     return _FALLBACK
