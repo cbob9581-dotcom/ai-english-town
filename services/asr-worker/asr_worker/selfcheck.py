@@ -23,8 +23,12 @@ def run(wav_path: str | None = None) -> dict:
     import wave
 
     start = time.perf_counter()
-    engine = WhisperEngine.load("auto")
-    load_secs = time.perf_counter() - start
+    try:
+        engine = WhisperEngine.load("auto")
+        load_secs = time.perf_counter() - start
+    except Exception as e:  # noqa: BLE001
+        load_secs = time.perf_counter() - start
+        return {"gpu_name": _nvidia_gpu(), "cuda_ok": False, "load_secs": load_secs, "peak_vram_mib": -1, "transcribe_ok": False, "transcribe_secs": -1.0, "device": "n/a", "error": str(e)}
     if wav_path:
         with wave.open(wav_path, "rb") as w:
             assert w.getnchannels() == 1 and w.getsampwidth() == 2, "selfcheck wav 必须 mono 16bit"
