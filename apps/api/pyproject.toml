@@ -22,3 +22,5 @@ packages = ["app"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# 静默 Starlette 1.4+ 对 httpx 的 testclient 弃用警告（源自 Task 3 test_scene_api.py 引入 fastapi.testclient；httpx2 迁移前先忽略）
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient` is deprecated"]
