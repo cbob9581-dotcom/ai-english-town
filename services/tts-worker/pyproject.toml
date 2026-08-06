@@ -1,0 +1,11 @@
+[project]
+name = "tts-worker"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["fastapi", "uvicorn", "kokoro-onnx"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["tts_worker"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

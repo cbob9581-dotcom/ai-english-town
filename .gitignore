@@ -8,6 +8,7 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+.pytest_cache/
 
 # 工具
 .superpowers/
