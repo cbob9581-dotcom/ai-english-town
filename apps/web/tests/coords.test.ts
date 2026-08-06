@@ -4,7 +4,7 @@ import { mapLogicalToCss, ensureMinHit } from '../src/coords';
 describe('coords', () => {
   it('maps 0..1000 logical coords proportionally', () => {
     const r = mapLogicalToCss(250, 500, 100, 100, 1000, 600);
-    expect(r).toEqual({ left: 250, top: 300, width: 100, height: 100 });
+    expect(r).toEqual({ left: 250, top: 300, width: 100, height: 60 });
   });
 
   it('expands small hit areas around center to 44px', () => {

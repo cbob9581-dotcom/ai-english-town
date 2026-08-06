@@ -8,7 +8,7 @@ export function mapLogicalToCss(
     left: (x / 1000) * viewportW,
     top: (y / 1000) * viewportH,
     width: (w / 1000) * viewportW,
-    height: (h / 1000) * viewportW,
+    height: (h / 1000) * viewportH,
   };
 }
 
