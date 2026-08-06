@@ -19,3 +19,9 @@ def test_price_question() -> None:
 def test_fallback() -> None:
     r = reply("asdfghjkl")
     assert "Sorry" in r["speech"]
+
+
+def test_candidate_word_ids() -> None:
+    assert reply("I want bread")["candidateWordIds"] == ["word_loaf_n_1"]
+    assert reply("thank you")["candidateWordIds"] == []
+    assert reply("hello")["candidateWordIds"] == []

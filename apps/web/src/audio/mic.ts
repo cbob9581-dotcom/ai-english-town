@@ -11,7 +11,6 @@ export class Mic {
     this.worklet = new AudioWorkletNode(this.ctx, 'pcm-collector');
     this.worklet.port.onmessage = (e) => this.onChunk?.(e.data as ArrayBuffer);
     source.connect(this.worklet);
-    this.worklet.connect(this.ctx.destination);
   }
 
   stop(): void {
