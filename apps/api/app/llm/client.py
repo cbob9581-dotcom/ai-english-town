@@ -48,8 +48,15 @@ class OpenAIClient:
         if settings.llm_model.startswith("deepseek-reasoner"):
             raise ValueError("deepseek-reasoner 不支持 JSON Output；请配置 llm_model=deepseek-chat")
         self._settings = settings
-        self._http_client = http_client
-        timeout = httpx.Timeout(settings.llm_connect_timeout_s, read=settings.llm_ttft_timeout_s)
+        # connect=建立连接；read=TTFT 守卫（流式按块读、非流式读响应体）。
+        # httpx 0.28 已移除 total 子超时；角色级总预算（NPC 3s / Tutor 6s）由调用方
+        # （Task 5 asyncio.timeout）强制，客户端不设总超时。以 httpx 默认 5.0 为底，
+        # 仅覆盖 connect/read——write/pool 保持默认，不继承 connect(1.5s)。
+        timeout = httpx.Timeout(
+            5.0,
+            connect=settings.llm_connect_timeout_s,
+            read=settings.llm_ttft_timeout_s,
+        )
         self._client = AsyncOpenAI(
             base_url=settings.llm_base_url, api_key=settings.llm_api_key,
             timeout=timeout, http_client=http_client, max_retries=0,
@@ -57,8 +64,7 @@ class OpenAIClient:
 
     async def stream_text(self, messages: list[dict], *, max_tokens: int,
                           temperature: float) -> AsyncIterator[TextDelta]:
-        s = self._settings
-        stream = await self._create_stream(messages, max_tokens, temperature)
+        stream = await self._retry_connect(self._stream_create, messages, max_tokens, temperature)
         async for chunk in stream:
             delta = TextDelta()
             if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
@@ -69,29 +75,17 @@ class OpenAIClient:
                 delta.usage = chunk.usage.model_dump()
             yield delta
 
-    async def _create_stream(self, messages, max_tokens, temperature):
+    async def _stream_create(self, messages, max_tokens, temperature):
         s = self._settings
-        for attempt in (1, 2):
-            try:
-                return await self._client.chat.completions.create(
-                    model=s.llm_model, messages=messages,
-                    temperature=temperature, max_tokens=max_tokens,
-                    stream=True, stream_options={"include_usage": True},
-                )
-            except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadError,
-                    httpx.RemoteProtocolError, APIConnectionError,
-                    APIStatusError) as e:
-                if attempt == 2:
-                    raise LLMConnectError(f"LLM connect failed: {e}") from e
-        raise AssertionError("unreachable")
+        return await self._client.chat.completions.create(
+            model=s.llm_model, messages=messages,
+            temperature=temperature, max_tokens=max_tokens,
+            stream=True, stream_options={"include_usage": True},
+        )
 
     async def complete_json(self, messages: list[dict], *, max_tokens: int,
                             temperature: float) -> JsonResult:
-        s = self._settings
-        resp = await self._client.chat.completions.create(
-            model=s.llm_model, messages=messages, temperature=temperature,
-            max_tokens=max_tokens, response_format={"type": "json_object"},
-        )
+        resp = await self._retry_connect(self._json_create, messages, max_tokens, temperature)
         content = resp.choices[0].message.content or ""
         try:
             parsed = json.loads(content)
@@ -104,6 +98,29 @@ class OpenAIClient:
             usage=resp.usage.model_dump() if resp.usage else None,
             finish_reason=resp.choices[0].finish_reason,
         )
+
+    async def _json_create(self, messages, max_tokens, temperature):
+        s = self._settings
+        return await self._client.chat.completions.create(
+            model=s.llm_model, messages=messages, temperature=temperature,
+            max_tokens=max_tokens, response_format={"type": "json_object"},
+        )
+
+    async def _retry_connect(self, call, messages, max_tokens, temperature):
+        """连接错误 / 瞬时 5xx 重试一次后抛 LLMConnectError；4xx 业务失败不重试、原样上抛。"""
+        for attempt in (1, 2):
+            try:
+                return await call(messages, max_tokens, temperature)
+            except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadError,
+                    httpx.RemoteProtocolError, APIConnectionError) as e:
+                if attempt == 2:
+                    raise LLMConnectError(f"LLM connect failed: {e}") from e
+            except APIStatusError as e:
+                if e.status_code < 500:
+                    raise  # 业务失败（401/403/404/422/429 等）不重试，作为 API 状态错误原样上抛
+                if attempt == 2:
+                    raise LLMConnectError(f"LLM connect failed: {e}") from e
+        raise AssertionError("unreachable")
 
 
 def get_client(settings: Settings) -> LLMAdapter:
