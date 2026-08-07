@@ -12,6 +12,7 @@ venv/
 
 # 工具
 .superpowers/
+.worktrees/
 .idea/
 .vscode/
 *.log
