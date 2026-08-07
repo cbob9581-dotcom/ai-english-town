@@ -100,8 +100,8 @@ def test_openai_client_declares_aclose() -> None:
 
 - [ ] **Step 2: 运行确认失败**
 
-Run: `cd apps/api && uv run pytest tests/test_llm_client.py::test_openai_client_aclose_called -v`
-Expected: FAIL（`AttributeError: 'MockAdapter' object has no attribute 'aclose'`）。
+Run: `cd apps/api && uv run pytest tests/test_llm_client.py -v`
+Expected: FAIL —— 红相：`test_mock_adapter_aclose_exists_and_noop` 的 `assert hasattr(MockAdapter, "aclose")` 失败；`test_openai_client_declares_aclose` 的 `OpenAIClient.aclose` 抛 AttributeError。其余既有用例仍绿。
 
 - [ ] **Step 3: 实现 `aclose`**
 
