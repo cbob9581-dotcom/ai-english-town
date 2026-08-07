@@ -119,3 +119,12 @@ async def test_timeout_degrades(tmp_path) -> None:
     res = await tutor.reply(session_id="s1", generation_id="g1", word_id="word_loaf_n_1", word="loaf")
     assert res.degraded is True
     assert log.rows[-1]["fallback_reason"] == "timeout"
+
+
+def test_tutor_prompt_uses_setting_char_limit() -> None:
+    from app.llm import tutor as tutor_mod
+    class S:
+        llm_max_scaffold_chars = 80
+    # TUTOR_SYSTEM_PROMPT 是带 {max_scaffold_chars} 占位符的常量模板，动态值在消息构造时 .format() 插入。
+    prompt = tutor_mod.TUTOR_SYSTEM_PROMPT.format(max_scaffold_chars=S.llm_max_scaffold_chars)
+    assert "under 80 characters" in prompt

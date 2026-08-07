@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -41,7 +42,12 @@ def create_app(events: EventStore | None = None, settings: Settings | None = Non
                      lambda u: scripted_reply(u)["speech"])
     tutor = CompanionTutor(client, settings, llm_log, cache, tts_impl)
 
-    app = FastAPI(title="english-town-api", version="0.2.0")
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        yield
+        await client.aclose()
+
+    app = FastAPI(title="english-town-api", version="0.2.0", lifespan=lifespan)
     app.state.events = events
     app.state.settings = settings
     app.state.scenes = scenes

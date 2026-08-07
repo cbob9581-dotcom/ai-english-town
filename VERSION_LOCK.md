@@ -40,3 +40,11 @@
 > 完整门禁（`e2e_voice_ok: true`）需：① 下载 kokoro 模型文件；② 安装 CUDA 运行时（cuBLAS/cuDNN）。
 
 启动自检项：GPU 名称 / CUDA 可用性 / ASR 模型加载 / 3s 转写 / 一句 TTS / 峰值显存 / 峰值耗时。
+
+## 阶段 3 运行注意（沿用阶段 2 env quirks）
+- vitest 需 `--maxWorkers=1`（16GB 机器）。
+- `apps/web/node_modules/.bin/vite` 是 stale pnpm shim：web 构建用
+  `node ../../node_modules/typescript/bin/tsc -b && node ../../node_modules/vite/bin/vite.js build`。
+- tts-worker venv 缺 `babel.core`；ASR venv 缺 `cublas64_12.dll`（各自 selfcheck 已降级处理）。
+- 无 `DEEPSEEK_API_KEY` → LLM 走 mock；`scripts/llm-smoke.py` golden 是手动测量步骤（不进 CI）。
+- Scene Director 无 key 时同样走确定性 mock（`MOCK_SCENE_SCENARIO`）。

@@ -35,6 +35,9 @@ class MockAdapter:
         self.scenario = scenario
         self.stream_text_override = stream_text_override
 
+    async def aclose(self) -> None:
+        return None
+
     async def stream_text(self, messages: list[dict], *, max_tokens: int,
                           temperature: float) -> AsyncIterator[TextDelta]:
         if self.scenario == "timeout":

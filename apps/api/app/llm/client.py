@@ -42,6 +42,8 @@ class LLMAdapter(Protocol):
     async def complete_json(self, messages: list[dict], *, max_tokens: int,
                             temperature: float) -> JsonResult: ...
 
+    async def aclose(self) -> None: ...
+
 
 class OpenAIClient:
     def __init__(self, settings: Settings, http_client: httpx.AsyncClient | None = None) -> None:
@@ -61,6 +63,9 @@ class OpenAIClient:
             base_url=settings.llm_base_url, api_key=settings.llm_api_key,
             timeout=timeout, http_client=http_client, max_retries=0,
         )
+
+    async def aclose(self) -> None:
+        await self._client.close()
 
     async def stream_text(self, messages: list[dict], *, max_tokens: int,
                           temperature: float) -> AsyncIterator[TextDelta]:

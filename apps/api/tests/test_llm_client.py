@@ -259,3 +259,22 @@ async def test_mock_invalid_json_raises_parse_error() -> None:
 async def test_mock_bad_scenario_rejected() -> None:
     with pytest.raises(ValueError):
         MockAdapter("nope")
+
+
+def test_mock_adapter_aclose_exists_and_noop() -> None:
+    """MockAdapter 必须实现 aclose（连接池释放钩子），调用不抛且幂等。红相：MockAdapter 无 aclose → FAIL。"""
+    from app.llm.mock import MockAdapter
+    import asyncio
+
+    assert hasattr(MockAdapter, "aclose")
+    m = MockAdapter("ok")
+    asyncio.run(m.aclose())   # 不抛
+    asyncio.run(m.aclose())   # 幂等
+
+
+def test_openai_client_declares_aclose() -> None:
+    """OpenAIClient 必须声明 async aclose（lifespan shutdown 调用）。红相：未实现 → AttributeError → FAIL。"""
+    from app.llm.client import OpenAIClient
+    import inspect
+
+    assert inspect.iscoroutinefunction(OpenAIClient.aclose)

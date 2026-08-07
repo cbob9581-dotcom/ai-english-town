@@ -18,8 +18,9 @@ from app.settings import Settings
 
 TUTOR_SYSTEM_PROMPT = (
     "You help an A1-A2 English learner understand one word. "
-    "Reply with ONLY a JSON object: {\"word\": <the given word>, \"scaffold\": <one simple English sentence>}. "
-    "The scaffold must contain the given word and be under 120 characters. No newlines, no URLs, no code."
+    'Reply with ONLY a JSON object: {{"word": <the given word>, "scaffold": <one simple English sentence>}}. '
+    "The scaffold must contain the given word and be under {max_scaffold_chars} characters. "
+    "No newlines, no URLs, no code."
 )
 
 
@@ -76,7 +77,7 @@ class CompanionTutor:
         scaffold = ""
         try:
             messages = [
-                {"role": "system", "content": TUTOR_SYSTEM_PROMPT},
+                {"role": "system", "content": TUTOR_SYSTEM_PROMPT.format(max_scaffold_chars=self._settings.llm_max_scaffold_chars)},
                 {"role": "user", "content": json.dumps({"word": word})},
             ]
             async with asyncio.timeout(self._settings.llm_total_timeout_tutor_s):
