@@ -155,17 +155,17 @@ def test_tutor_prompt_uses_setting_char_limit() -> None:
     from app.llm import tutor as tutor_mod
     class S:
         llm_max_scaffold_chars = 80
-    prompt = tutor_mod.TUTOR_SYSTEM_PROMPT  # 仍是常量模板，动态值在消息构造时插入
+    prompt = tutor_mod.TUTOR_SYSTEM_PROMPT.format(max_scaffold_chars=S.llm_max_scaffold_chars)
     assert "under 80 characters" in prompt
 ```
 
-先把 `TUTOR_SYSTEM_PROMPT` 改成带占位符并用实例属性填充：
+先把 `TUTOR_SYSTEM_PROMPT` 改成带占位符并用实例属性填充。注意：模板里的 JSON 大括号必须转义为 `{{...}}`，否则 `.format()` 会把 `{"word"` 当替换字段抛 `KeyError`（RED 阶段实证）：
 
 ```python
 # apps/api/app/llm/tutor.py
 TUTOR_SYSTEM_PROMPT = (
     "You help an A1-A2 English learner understand one word. "
-    "Reply with ONLY a JSON object: {\"word\": <the given word>, \"scaffold\": <one simple English sentence>}. "
+    'Reply with ONLY a JSON object: {{"word": <the given word>, "scaffold": <one simple English sentence>}}. '
     "The scaffold must contain the given word and be under {max_scaffold_chars} characters. "
     "No newlines, no URLs, no code."
 )
