@@ -60,6 +60,7 @@ def main() -> None:
         wav_path.unlink(missing_ok=True)
     else:
         report["asr"] = run_in("services/asr-worker", "asr_worker.selfcheck")
+    report["llm"] = run_in("apps/api", "app.llm.probe")
     report["total_secs"] = round(time.perf_counter() - t0, 2)
     # 端到端语音门禁：TTS 合成成功 且 ASR 转写成功（非空）
     report["e2e_voice_ok"] = bool(report["tts"].get("audio_bytes")) and bool(report["asr"].get("transcribe_ok"))
