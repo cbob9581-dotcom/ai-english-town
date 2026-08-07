@@ -35,3 +35,8 @@ def test_fill_placed_inside_its_slot_zone() -> None:
             assert counter_zone["y"][0] <= e["layout"]["y"] <= counter_zone["y"][1]
             return
     raise AssertionError("loaf fill not found")
+
+
+def test_compiled_scene_includes_npc_entity() -> None:
+    compiled = compile_from_docs(ARCHETYPE, template_scene_plan())
+    assert any(e["component"] == "npc" for e in compiled["entities"])

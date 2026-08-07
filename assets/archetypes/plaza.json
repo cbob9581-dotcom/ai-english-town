@@ -1,0 +1,27 @@
+{
+  "archetypeId": "plaza",
+  "displayName": "小镇广场",
+  "background": {
+    "style": "gradient",
+    "gradient": "linear-gradient(#aee3ff 0%, #cdeffd 45%, #86b871 46%, #5d9e50 100%)",
+    "decor": ["fountain", "tree", "bench"],
+    "ambienceKey": "ambience/plaza_loop.ogg"
+  },
+  "zones": {
+    "center":  { "x": [380, 620], "y": [420, 700], "anchor": "bottom" },
+    "fountain": { "x": [430, 570], "y": [280, 520], "anchor": "center" },
+    "bench":   { "x": [80, 330],  "y": [560, 820], "anchor": "bottom" }
+  },
+  "propSlots": [
+    { "slotId": "fountain.center", "zone": "fountain", "categories": ["decoration", "nature"] },
+    { "slotId": "bench.left",      "zone": "bench",    "categories": ["furniture"] },
+    { "slotId": "center.pigeon",   "zone": "center",   "categories": ["nature", "food"] }
+  ],
+  "npcSlots": [ { "slotId": "guide", "zone": "center", "role": "greeter" } ],
+  "exits": [
+    { "direction": "left",  "targetKind": "any" },
+    { "direction": "right", "targetKind": "any" },
+    { "direction": "up",    "targetKind": "any" },
+    { "direction": "down",  "targetKind": "any" }
+  ]
+}

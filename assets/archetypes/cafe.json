@@ -1,0 +1,18 @@
+{
+  "archetypeId": "cafe",
+  "displayName": "街角咖啡馆",
+  "background": {
+    "style": "gradient",
+    "gradient": "linear-gradient(#ffe8d0 0%, #ffd9a8 55%, #b98a5e 56%, #8a5a34 100%)",
+    "decor": ["bench"],
+    "ambienceKey": "ambience/cafe_loop.ogg"
+  },
+  "zones": {
+    "counter": { "x": [80, 920], "y": [420, 820], "anchor": "bottom" }
+  },
+  "propSlots": [
+    { "slotId": "counter.table", "zone": "counter", "categories": ["food", "furniture"] }
+  ],
+  "npcSlots": [ { "slotId": "barista", "zone": "counter", "role": "barista" } ],
+  "exits": [ { "direction": "left", "targetKind": "any" } ]
+}

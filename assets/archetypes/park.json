@@ -1,0 +1,18 @@
+{
+  "archetypeId": "park",
+  "displayName": "城市公园",
+  "background": {
+    "style": "gradient",
+    "gradient": "linear-gradient(#cdeffd 0%, #aee3ff 45%, #86b871 46%, #5d9e50 100%)",
+    "decor": ["tree", "bench"],
+    "ambienceKey": "ambience/park_loop.ogg"
+  },
+  "zones": {
+    "meadow": { "x": [80, 920], "y": [420, 820], "anchor": "bottom" }
+  },
+  "propSlots": [
+    { "slotId": "meadow.tree", "zone": "meadow", "categories": ["nature"] }
+  ],
+  "npcSlots": [ { "slotId": "keeper", "zone": "meadow", "role": "guard" } ],
+  "exits": [ { "direction": "down", "targetKind": "any" } ]
+}

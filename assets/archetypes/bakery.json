@@ -18,5 +18,5 @@
     { "slotId": "shelf.top",    "zone": "shelf",   "categories": ["container", "decoration"] }
   ],
   "npcSlots": [ { "slotId": "vendor", "zone": "counter", "role": "vendor" } ],
-  "exits": [ { "direction": "left", "targetKind": "any" }, { "direction": "right", "targetKind": "any" } ]
+  "exits": [ { "direction": "left", "targetKind": "any" } ]
 }

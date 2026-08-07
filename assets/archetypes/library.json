@@ -1,0 +1,18 @@
+{
+  "archetypeId": "library",
+  "displayName": "小镇图书馆",
+  "background": {
+    "style": "gradient",
+    "gradient": "linear-gradient(#f4ead8 0%, #e6d5b8 55%, #a98a5e 56%, #8a6a3e 100%)",
+    "decor": ["bench"],
+    "ambienceKey": "ambience/library_loop.ogg"
+  },
+  "zones": {
+    "desk": { "x": [80, 920], "y": [420, 820], "anchor": "bottom" }
+  },
+  "propSlots": [
+    { "slotId": "desk.table", "zone": "desk", "categories": ["paper", "furniture"] }
+  ],
+  "npcSlots": [ { "slotId": "librarian", "zone": "desk", "role": "librarian" } ],
+  "exits": [ { "direction": "left", "targetKind": "any" } ]
+}

@@ -37,7 +37,7 @@
     },
     "exits": {
       "type": "array",
-      "items": { "type": "object", "required": ["direction", "targetKind"], "properties": { "direction": { "enum": ["left", "right"] }, "targetKind": { "type": "string" } } }
+      "items": { "type": "object", "required": ["direction", "targetKind"], "properties": { "direction": { "enum": ["left", "right", "up", "down"] }, "targetKind": { "type": "string" } } }
     }
   }
 }

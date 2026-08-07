@@ -26,11 +26,16 @@ def _zone_center(zone: dict, slot_index: int) -> dict:
 
 
 def _door_entity(index: int, direction: str) -> dict:
-    x = 920 if direction == "right" else 60
+    if direction == "up":
+        pos = {"x": 500, "y": 60}
+    elif direction == "down":
+        pos = {"x": 500, "y": 830}
+    else:
+        pos = {"x": 920 if direction == "right" else 60, "y": 520}
     return {
         "id": f"door-{index}",
         "component": "door",
-        "layout": {"x": x, "y": 520, "w": 90, "h": 200, "anchor": "bottom"},
+        "layout": {**pos, "w": 90, "h": 120 if direction in ("up", "down") else 200, "anchor": "bottom"},
         "appearance": {"visualKey": "door.wooden"},
         "semantics": {"name": "door"},
         "interactions": ["pick"],
@@ -42,16 +47,30 @@ def compile_scene(archetype: Archetype, plan: ScenePlan) -> dict:
     zone_of_slot = {s["slotId"]: s["zone"] for s in archetype.propSlots}
     zones = archetype.zones
     entities: list[dict] = []
-    counter: dict[str, int] = {}
+    counter: dict[str, int] = {}   # 按 slotId 计数（骨架与 filled 同槽位 id 一致 → diff 可对齐）
     for fill in plan.fills:
         zone_name = zone_of_slot.get(fill["slotId"])
         if not zone_name or zone_name not in zones:
             continue
-        counter[zone_name] = counter.get(zone_name, 0) + 1
+        counter[fill["slotId"]] = counter.get(fill["slotId"], 0) + 1
         entity = dict(fill["entity"])
-        entity["id"] = fill["entity"].get("id") or f"{fill['slotId']}-{counter[zone_name]}"
-        entity["layout"] = _zone_center(zones[zone_name].model_dump(), counter[zone_name] - 1)
+        entity["id"] = fill["entity"].get("id") or f"{fill['slotId']}-{counter[fill['slotId']]}"
+        entity["layout"] = _zone_center(zones[zone_name].model_dump(), counter[fill["slotId"]] - 1)
         entities.append(entity)
+
+    npc_slot_of = {s["slotId"]: s for s in archetype.npcSlots}
+    for ch in plan.characters:
+        slot = npc_slot_of.get(ch["slotId"])
+        if not slot or slot["zone"] not in zones:
+            continue
+        entities.append({
+            "id": f"npc-{ch['slotId']}",
+            "component": "npc",
+            "layout": _zone_center(zones[slot["zone"]].model_dump(), 0),
+            "appearance": {"visualKey": ch.get("visualKey", f"npc.{slot.get('role', 'vendor')}")},
+            "semantics": {"name": ch.get("name", ch.get("npcId", ch["slotId"])), "npcId": ch["npcId"]},
+            "interactions": ["focus", "ask"],
+        })
 
     entities.append(dict(COMPANION_ENTITY))
     for i, exit_spec in enumerate(archetype.exits):
@@ -62,6 +81,7 @@ def compile_scene(archetype: Archetype, plan: ScenePlan) -> dict:
         "sceneId": plan.sceneId,
         "generationId": plan.generationId,
         "setting": plan.setting,
+        "background": archetype.background.model_dump(),
         "entities": entities,
         "characters": [c for c in plan.characters],
     }

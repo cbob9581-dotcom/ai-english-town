@@ -41,7 +41,7 @@ export const ArchetypeSchema = z.object({
   })),
   propSlots: z.array(z.object({ slotId: z.string(), zone: z.string(), categories: z.array(z.string()) })),
   npcSlots: z.array(z.object({ slotId: z.string(), zone: z.string(), role: z.string() })),
-  exits: z.array(z.object({ direction: z.enum(['left', 'right']), targetKind: z.string() })),
+  exits: z.array(z.object({ direction: z.enum(['left', 'right', 'up', 'down']), targetKind: z.string() })),
 });
 
 export const ScenePlanSchema = z.object({

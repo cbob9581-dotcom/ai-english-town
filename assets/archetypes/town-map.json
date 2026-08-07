@@ -1,0 +1,11 @@
+{
+  "start": "plaza",
+  "edges": {
+    "plaza":   { "left": "bakery", "right": "cafe", "up": "park", "down": "station" },
+    "bakery":  { "left": "plaza" },
+    "cafe":    { "left": "plaza" },
+    "park":    { "down": "plaza" },
+    "station": { "left": "plaza", "right": "library" },
+    "library": { "left": "station" }
+  }
+}
