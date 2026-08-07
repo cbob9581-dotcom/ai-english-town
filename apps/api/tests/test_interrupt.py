@@ -76,6 +76,36 @@ async def test_spurious_audio_start_without_frames_ignored(tmp_path) -> None:
     assert "npc.speech.commit" in _sent_types(ws)    # u1 的 commit 确实发出（回合未被取消）
 
 
+async def test_round_failure_then_interrupt_writes_no_interrupted(tmp_path) -> None:
+    # 回合以非 CancelledError 失败（ASR 网络错误）→ _run_round 发 round.error 并清 active_turn_id；
+    # 之后到达的 playback.interrupted 不得再为这个从未 commit 的回合写 dialogue.turn.interrupted。
+    async def failing_asr(samples: bytes):
+        raise RuntimeError("asr worker network error")
+
+    events, app = make_app(tmp_path)
+    app.state.asr_client = failing_asr
+    ws = FakeWS([
+        audio_start("u1"), audio_frame(), audio_end("u1"),
+        {"type": "sleep", "seconds": 0.2},   # u1 回合任务启动即失败（round.error + 清 active_turn_id）
+        {"type": "websocket.receive",
+         "text": json.dumps({"type": "playback.interrupted"})},
+    ], app)
+    task = asyncio.create_task(ws_session(ws))
+    await asyncio.sleep(0.6)   # 跑完整个脚本
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    cancel_round(app)
+
+    err = [m for m in ws.sent if isinstance(m, dict) and m["type"] == "round.error"]
+    assert len(err) == 1
+    assert err[0]["turnId"]  # round.error 仍携带失败回合的 turnId（在清 active_turn_id 前捕获）
+    assert app.state.sessions["sess-x"].active_turn_id is None  # 失败后 active_turn_id 已被清
+
+    evs = events.list_after("sess-x", 0)
+    assert all(e["event_type"] != "dialogue.turn.interrupted" for e in evs)
+
+
 async def test_interrupted_played_ms_is_per_turn(tmp_path) -> None:
     # 第 1 回合完整播放（累计 played_ms=90），第 2 回合首句后被打断 →
     # interrupted 的 playedMs 只反映第 2 回合已播放的 ms（30），而非会话累计（120）。

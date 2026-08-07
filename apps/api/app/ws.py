@@ -92,7 +92,11 @@ async def ws_session(ws: WebSocket) -> None:
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001 —— 回合失败不杀连接
-            await send({"type": "round.error", "turnId": state.active_turn_id, "error": str(e)})
+            # 非取消失败后必须清掉 active_turn_id：否则后续 playback.interrupted 会给
+            # 这个从未 commit 的回合补写一条虚假的 dialogue.turn.interrupted。
+            turn_id = state.active_turn_id
+            state.active_turn_id = None
+            await send({"type": "round.error", "turnId": turn_id, "error": str(e)})
         finally:
             state.round_task = None
 
