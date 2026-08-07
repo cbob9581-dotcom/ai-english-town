@@ -49,6 +49,20 @@ def _wav_bytes_from_base64(b64: str) -> bytes:
     return base64.b64decode(b64)
 
 
+def check_catalog_icons() -> list[str]:
+    import json as _json
+    from pathlib import Path
+    assets = ROOT / "assets"
+    try:
+        entities = _json.loads((assets / "catalog" / "entities.json").read_text(encoding="utf-8"))
+        icons = set(_json.loads((assets / "icons" / "icon-map.json").read_text(encoding="utf-8")))
+    except FileNotFoundError as e:  # 老仓库无 catalog 时降级跳过，不 crash
+        return [f"catalog check skipped: {e}"]
+    keys = {row["visualKey"] for rows in entities.values() for row in rows}
+    missing = keys - icons
+    return [f"missing icon for {k}" for k in sorted(missing)]
+
+
 def main() -> None:
     report: dict = {"gpu": gpu_info()}
     t0 = time.perf_counter()
@@ -61,6 +75,7 @@ def main() -> None:
     else:
         report["asr"] = run_in("services/asr-worker", "asr_worker.selfcheck")
     report["llm"] = run_in("apps/api", "app.llm.probe")
+    report["catalogIconMissing"] = check_catalog_icons()
     report["total_secs"] = round(time.perf_counter() - t0, 2)
     # 端到端语音门禁：TTS 合成成功 且 ASR 转写成功（非空）
     report["e2e_voice_ok"] = bool(report["tts"].get("audio_bytes")) and bool(report["asr"].get("transcribe_ok"))

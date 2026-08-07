@@ -7,5 +7,14 @@
   "door.wooden":  { "emoji": "🚪", "label": "door" },
   "decor.window": { "emoji": "🌞", "label": "window" },
   "decor.shelf":  { "emoji": "🪵", "label": "shelf" },
-  "decor.sign":   { "emoji": "☕", "label": "sign" }
+  "decor.sign":   { "emoji": "☕", "label": "sign" },
+  "nature.pigeon":   { "emoji": "🕊️", "label": "pigeon" },
+  "nature.tree":     { "emoji": "🌳", "label": "tree" },
+  "deco.fountain":   { "emoji": "⛲", "label": "fountain" },
+  "furniture.bench": { "emoji": "🪑", "label": "bench" },
+  "npc.greeter":     { "emoji": "🧑‍🌾", "label": "greeter" },
+  "npc.guard":       { "emoji": "🧑‍✈️", "label": "guard" },
+  "npc.conductor":   { "emoji": "👩‍✈️", "label": "conductor" },
+  "npc.barista":     { "emoji": "🧑‍🍳", "label": "barista" },
+  "npc.librarian":   { "emoji": "👩‍🏫", "label": "librarian" }
 }

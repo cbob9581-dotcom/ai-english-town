@@ -1,0 +1,19 @@
+{
+  "food": [
+    {"conceptId": "concept.food.loaf", "name": "loaf", "lemma": "loaf", "pos": "n", "visualKey": "food.loaf"},
+    {"conceptId": "concept.food.apple", "name": "apple", "lemma": "apple", "pos": "n", "visualKey": "food.apple"}
+  ],
+  "paper": [
+    {"conceptId": "concept.paper.receipt", "name": "receipt", "lemma": "receipt", "pos": "n", "visualKey": "paper.receipt"}
+  ],
+  "nature": [
+    {"conceptId": "concept.nature.pigeon", "name": "pigeon", "lemma": "pigeon", "pos": "n", "visualKey": "nature.pigeon"},
+    {"conceptId": "concept.nature.tree", "name": "tree", "lemma": "tree", "pos": "n", "visualKey": "nature.tree"}
+  ],
+  "decoration": [
+    {"conceptId": "concept.deco.fountain", "name": "fountain", "lemma": "fountain", "pos": "n", "visualKey": "deco.fountain"}
+  ],
+  "furniture": [
+    {"conceptId": "concept.furn.bench", "name": "bench", "lemma": "bench", "pos": "n", "visualKey": "furniture.bench"}
+  ]
+}
