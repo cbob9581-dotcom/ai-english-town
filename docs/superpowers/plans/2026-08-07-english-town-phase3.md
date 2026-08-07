@@ -475,6 +475,7 @@ git commit -m "feat(assets): concept/npc catalog + wordId resolver + build-time 
 
 **Files:**
 - Create: `assets/archetypes/town-map.json`、`assets/archetypes/plaza.json`
+- Create: `assets/archetypes/{park,station,cafe,library}.json`（最小 stub，exits 与 town-map 方向一致；Task 13 再补全为完整原型 —— 用户裁决，因为 town-map 测试要求每条边的两端原型都存在）
 - Modify: `assets/archetypes/bakery.json`（exits 收敛为单出口）
 - Modify: `packages/scene-compiler/scene_compiler/compiler.py`
 - Modify: `packages/scene-schema/schemas/archetype.schema.json`、`packages/scene-schema/src/index.ts`（exits direction 增 up/down）
@@ -551,6 +552,94 @@ exits: z.array(z.object({ direction: z.enum(['left', 'right', 'up', 'down']), ta
     { "direction": "up",    "targetKind": "any" },
     { "direction": "down",  "targetKind": "any" }
   ]
+}
+```
+4 个最小 stub 原型（exits 方向与 town-map 完全一致；role 与 Task 2 的 6 个 NPC 对应；propSlots 分类只用 Task 2 catalog 已配图标的分类，保证骨架编译与构建期图标校验绿）：
+```json
+// assets/archetypes/park.json
+{
+  "archetypeId": "park",
+  "displayName": "城市公园",
+  "background": {
+    "style": "gradient",
+    "gradient": "linear-gradient(#cdeffd 0%, #aee3ff 45%, #86b871 46%, #5d9e50 100%)",
+    "decor": ["tree", "bench"],
+    "ambienceKey": "ambience/park_loop.ogg"
+  },
+  "zones": {
+    "meadow": { "x": [80, 920], "y": [420, 820], "anchor": "bottom" }
+  },
+  "propSlots": [
+    { "slotId": "meadow.tree", "zone": "meadow", "categories": ["nature"] }
+  ],
+  "npcSlots": [ { "slotId": "keeper", "zone": "meadow", "role": "guard" } ],
+  "exits": [ { "direction": "down", "targetKind": "any" } ]
+}
+```
+```json
+// assets/archetypes/station.json
+{
+  "archetypeId": "station",
+  "displayName": "小镇车站",
+  "background": {
+    "style": "gradient",
+    "gradient": "linear-gradient(#e8ecf2 0%, #cfd8e3 55%, #8a94a6 56%, #6b7588 100%)",
+    "decor": ["bench"],
+    "ambienceKey": "ambience/station_loop.ogg"
+  },
+  "zones": {
+    "platform": { "x": [80, 920], "y": [420, 820], "anchor": "bottom" }
+  },
+  "propSlots": [
+    { "slotId": "platform.bench", "zone": "platform", "categories": ["furniture", "paper"] }
+  ],
+  "npcSlots": [ { "slotId": "conductor", "zone": "platform", "role": "conductor" } ],
+  "exits": [
+    { "direction": "left", "targetKind": "any" },
+    { "direction": "right", "targetKind": "any" }
+  ]
+}
+```
+```json
+// assets/archetypes/cafe.json
+{
+  "archetypeId": "cafe",
+  "displayName": "街角咖啡馆",
+  "background": {
+    "style": "gradient",
+    "gradient": "linear-gradient(#ffe8d0 0%, #ffd9a8 55%, #b98a5e 56%, #8a5a34 100%)",
+    "decor": ["bench"],
+    "ambienceKey": "ambience/cafe_loop.ogg"
+  },
+  "zones": {
+    "counter": { "x": [80, 920], "y": [420, 820], "anchor": "bottom" }
+  },
+  "propSlots": [
+    { "slotId": "counter.table", "zone": "counter", "categories": ["food", "furniture"] }
+  ],
+  "npcSlots": [ { "slotId": "barista", "zone": "counter", "role": "barista" } ],
+  "exits": [ { "direction": "left", "targetKind": "any" } ]
+}
+```
+```json
+// assets/archetypes/library.json
+{
+  "archetypeId": "library",
+  "displayName": "小镇图书馆",
+  "background": {
+    "style": "gradient",
+    "gradient": "linear-gradient(#f4ead8 0%, #e6d5b8 55%, #a98a5e 56%, #8a6a3e 100%)",
+    "decor": ["bench"],
+    "ambienceKey": "ambience/library_loop.ogg"
+  },
+  "zones": {
+    "desk": { "x": [80, 920], "y": [420, 820], "anchor": "bottom" }
+  },
+  "propSlots": [
+    { "slotId": "desk.table", "zone": "desk", "categories": ["paper", "furniture"] }
+  ],
+  "npcSlots": [ { "slotId": "librarian", "zone": "desk", "role": "librarian" } ],
+  "exits": [ { "direction": "left", "targetKind": "any" } ]
 }
 ```
 `assets/archetypes/bakery.json` 的 `exits` 改为：`"exits": [ { "direction": "left", "targetKind": "any" } ]`
@@ -717,7 +806,8 @@ class SceneStore:
         return self._load_archetype(archetype_id)
 
     def list_archetype_ids(self) -> list[str]:
-        return [p.stem for p in self._archetypes_dir.glob("*.json")]
+        # town-map.json 也住在 archetypes 目录，排除掉（否则会被当成可玩原型）
+        return [p.stem for p in self._archetypes_dir.glob("*.json") if p.stem != "town-map"]
 
     @lru_cache(maxsize=1)
     def load_town_map(self) -> dict:
@@ -927,7 +1017,7 @@ Expected: 全部 PASS。
 - [ ] **Step 8: 提交**
 
 ```bash
-git add assets/archetypes/town-map.json assets/archetypes/plaza.json assets/archetypes/bakery.json packages/scene-compiler packages/scene-schema/schemas/archetype.schema.json packages/scene-schema/src/index.ts apps/api/app/scene_store.py apps/api/tests/test_town_map.py apps/api/tests/test_skeleton.py
+git add assets/archetypes packages/scene-compiler packages/scene-schema/schemas/archetype.schema.json packages/scene-schema/src/index.ts apps/api/app/scene_store.py apps/api/tests/test_town_map.py apps/api/tests/test_skeleton.py
 git commit -m "feat(scene): town-map + 4-way exits + deterministic skeleton compiler + plan expansion"
 ```
 
@@ -3407,7 +3497,7 @@ git commit -m "feat(web): archetype-driven viewport + exits + hover hint + gestu
 ### Task 13: 批量补 4 原型 + 资产扩展 + selfcheck 扩展
 
 **Files:**
-- Create: `assets/archetypes/{park,station,cafe,library}.json`
+- Replace: `assets/archetypes/{park,station,cafe,library}.json`（Task 3 已建最小 stub，本任务补全为完整原型）
 - Modify: `assets/catalog/entities.json`、`assets/icons/icon-map.json`
 - Modify: `scripts/startup-selfcheck.py`（town-map 边完整性 + catalog 图标 + Director 探活 + 音色合成耗时）
 - Test: `apps/api/tests/test_town_map.py`（已覆盖新原型）、`apps/api/tests/test_catalog.py`（图标覆盖自动覆盖新条目）
