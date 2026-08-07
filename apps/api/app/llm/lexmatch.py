@@ -6,15 +6,21 @@ import re
 
 _TOKEN = re.compile(r"[a-z]+")
 
+# 标准 f→v 变复数名词集（loaf→loaves 等）。非此集的词不适用 f/fe→ves 规则，
+# 避免 belief→believes、safe→saves、roof→rooves 等假阳性。
+_F_V_SET = {"loaf", "leaf", "wolf", "thief", "shelf", "wife", "life", "knife"}
+
 
 def _variants(lemma: str) -> set[str]:
     v = {lemma, lemma + "s", lemma + "es"}
-    if lemma.endswith("y") and len(lemma) > 1:
+    # y→ies 仅当前一字母为辅音（cry→cries），排除 day→daies、boy→boies 等
+    if lemma.endswith("y") and len(lemma) > 1 and lemma[-2] not in "aeiou":
         v.add(lemma[:-1] + "ies")
-    if lemma.endswith("fe") and len(lemma) > 2:
-        v.add(lemma[:-2] + "ves")
-    if lemma.endswith("f") and len(lemma) > 1:
-        v.add(lemma[:-1] + "ves")
+    if lemma in _F_V_SET:
+        if lemma.endswith("fe") and len(lemma) > 2:
+            v.add(lemma[:-2] + "ves")
+        if lemma.endswith("f") and len(lemma) > 1:
+            v.add(lemma[:-1] + "ves")
     return v
 
 

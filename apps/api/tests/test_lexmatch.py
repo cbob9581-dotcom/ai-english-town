@@ -31,3 +31,11 @@ def test_token_contains_helper() -> None:
     assert token_contains("The loaves are fresh.", "loaf") is True
     assert token_contains("The receipt is here.", "loaf") is False
     assert token_contains("An apple!", "apple") is True
+
+
+def test_no_false_positive_belief_believes() -> None:
+    assert token_contains("He believes it.", "belief") is False
+
+
+def test_no_false_positive_safe_saves() -> None:
+    assert token_contains("She saves money.", "safe") is False
