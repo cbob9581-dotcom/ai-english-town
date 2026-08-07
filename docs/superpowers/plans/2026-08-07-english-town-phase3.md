@@ -728,15 +728,17 @@ def compile_scene(archetype: Archetype, plan: ScenePlan) -> dict:
     zone_of_slot = {s["slotId"]: s["zone"] for s in archetype.propSlots}
     zones = archetype.zones
     entities: list[dict] = []
-    counter: dict[str, int] = {}   # 按 slotId 计数（骨架与 filled 同槽位 id 一致 → diff 可对齐）
+    counter: dict[str, int] = {}   # 按 slotId 计数，保证骨架与 filled 同槽位 id 一致（diff 可对齐）
+    zone_idx: dict[str, int] = {}  # 按 zone 计数，布局错开（同 zone 多物品 / NPC 不重叠）
     for fill in plan.fills:
         zone_name = zone_of_slot.get(fill["slotId"])
         if not zone_name or zone_name not in zones:
             continue
         counter[fill["slotId"]] = counter.get(fill["slotId"], 0) + 1
+        zone_idx[zone_name] = zone_idx.get(zone_name, 0) + 1
         entity = dict(fill["entity"])
         entity["id"] = fill["entity"].get("id") or f"{fill['slotId']}-{counter[fill['slotId']]}"
-        entity["layout"] = _zone_center(zones[zone_name].model_dump(), counter[fill["slotId"]] - 1)
+        entity["layout"] = _zone_center(zones[zone_name].model_dump(), zone_idx[zone_name] - 1)
         entities.append(entity)
 
     npc_slot_of = {s["slotId"]: s for s in archetype.npcSlots}
@@ -744,10 +746,11 @@ def compile_scene(archetype: Archetype, plan: ScenePlan) -> dict:
         slot = npc_slot_of.get(ch["slotId"])
         if not slot or slot["zone"] not in zones:
             continue
+        zone_idx[slot["zone"]] = zone_idx.get(slot["zone"], 0) + 1  # NPC 排在 zone 内 prop 之后，不重叠
         entities.append({
             "id": f"npc-{ch['slotId']}",
             "component": "npc",
-            "layout": _zone_center(zones[slot["zone"]].model_dump(), 0),
+            "layout": _zone_center(zones[slot["zone"]].model_dump(), zone_idx[slot["zone"]] - 1),
             "appearance": {"visualKey": ch.get("visualKey", f"npc.{slot.get('role', 'vendor')}")},
             "semantics": {"name": ch.get("name", ch.get("npcId", ch["slotId"])), "npcId": ch["npcId"]},
             "interactions": ["focus", "ask"],
