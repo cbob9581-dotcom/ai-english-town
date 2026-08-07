@@ -3,7 +3,7 @@ wordId 由 llm/concepts.py 服务端 resolve（阶段 4 接 learning_items）。
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 
