@@ -30,6 +30,8 @@ async def run_round(
 ) -> dict:
     turn_id = state.new_turn_id()
     state.active_turn_id = turn_id
+    # per-turn：interrupted 事件的 playedMs 只反映本回合已播放 ms，而非会话累计
+    state.played_ms = 0
     asr_result = await asr_client(audio_pcm16)
     final_text = asr_result["finalText"].strip()
     if not final_text:

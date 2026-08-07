@@ -47,23 +47,55 @@ async def test_explicit_interrupt_without_turn_writes_nothing(tmp_path) -> None:
 
 
 async def test_spurious_audio_start_without_frames_ignored(tmp_path) -> None:
-    # 1 句短回复 + slow_delta：u1 回合在 sleep 标记内跑完并 commit
+    # u1 回合逐句播放中，u2 的 audio.start（barge_in_armed=True）到达但窗口期内无任何帧 →
+    # spurious 守卫触发并清掉 armed 旗标；绝不打断 u1，也不写 interrupted。
     events, app = make_app(tmp_path, scenario="ok", slow_delta_s=0.3,
                            stream_text_override="Hi there. ")
     ws = FakeWS([
         audio_start("u1"), audio_frame(), audio_end("u1"),
-        {"type": "sleep", "seconds": 0.5},   # u1 回合完成（delta + commit）
-        audio_start("u2"), audio_end("u2"),  # u2 无任何帧
+        {"type": "sleep", "seconds": 0.15},   # u1 回合启动，首句 delta 尚未发出（回合仍在跑）
+        audio_start("u2"),                    # 播放中 stray start → barge_in_armed=True，无帧、无 audio.end
+        {"type": "sleep", "seconds": 1.0},    # u2 窗口期过 → 守卫触发；u1 继续播放并完成
     ], app)
     task = asyncio.create_task(ws_session(ws))
     await asyncio.sleep(0)   # 让 ws_session 初始化 session state
-    app.state.sessions["sess-x"].spurious_window_s = 0.02
-    await asyncio.sleep(0.8)   # u2 的 start 因无帧被 spurious 守卫忽略
+    st = app.state.sessions["sess-x"]
+    st.spurious_window_s = 0.02
+    await asyncio.sleep(1.2)   # 守卫已触发 + u1 回合完成
+    # 守卫确实触发了：窗口期后 stray start 的 armed 旗标被清空（无 audio.end、无帧去清）
+    assert st.audio_start_armed is False
+    assert st.barge_in_armed is False
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
     cancel_round(app)
 
     types = [e["event_type"] for e in events.list_after("sess-x", 0)]
-    assert "dialogue.turn" in types       # u1 正常完成
-    assert "dialogue.turn.interrupted" not in types
+    assert "dialogue.turn" in types                  # u1 正常完成
+    assert "dialogue.turn.interrupted" not in types  # 守卫不打断、不记事件
+    assert "npc.speech.commit" in _sent_types(ws)    # u1 的 commit 确实发出（回合未被取消）
+
+
+async def test_interrupted_played_ms_is_per_turn(tmp_path) -> None:
+    # 第 1 回合完整播放（累计 played_ms=90），第 2 回合首句后被打断 →
+    # interrupted 的 playedMs 只反映第 2 回合已播放的 ms（30），而非会话累计（120）。
+    events, app = make_app(tmp_path, scenario="ok", slow_delta_s=0.3)
+    ws = FakeWS([
+        audio_start("u1"), audio_frame(), audio_end("u1"),
+        {"type": "sleep", "seconds": 1.2},   # u1 完整跑完（3 句 × slow_delta 0.3 → done ≈0.91）
+        audio_start("u2"), audio_frame(), audio_end("u2"),   # 第 2 回合启动
+        {"type": "sleep", "seconds": 0.4},   # u2 首句 delta（≈0.3s 后）已发出并计 ms
+        audio_start("u3"), audio_frame(),    # 播放中 → 打断 u2（无 audio.end，不启动新回合）
+    ], app)
+    task = asyncio.create_task(ws_session(ws))
+    await asyncio.sleep(1.8)   # 打完整个脚本
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    cancel_round(app)
+
+    evs = events.list_after("sess-x", 0)
+    intr = [e for e in evs if e["event_type"] == "dialogue.turn.interrupted"]
+    assert len(intr) == 1
+    # 仅本回合（u2）已播放 1 句的 TTS ms（fake_tts ms=30）；u1 累计的 90ms 不计入
+    assert intr[0]["payload"]["playedMs"] == 30
