@@ -1,6 +1,6 @@
 """确定性 mock LLM。离线测试 + 故障注入（MOCK_LLM_SCENARIO）。
-scenario 枚举：ok | timeout | connect_error | invalid_json | bad_word_id
-             | missing_word | too_long | truncated | empty
+scenario 枚举：ok | timeout | connect_error | status_error | invalid_json
+             | bad_word_id | missing_word | too_long | truncated | empty
 """
 from __future__ import annotations
 
@@ -8,12 +8,24 @@ import asyncio
 import json
 from typing import AsyncIterator
 
+import httpx
+from openai import APIStatusError
+
 from app.llm.client import JsonParseError, JsonResult, LLMConnectError, TextDelta
 
 SCENARIOS = frozenset({
-    "ok", "timeout", "connect_error", "invalid_json", "bad_word_id",
-    "missing_word", "too_long", "truncated", "empty",
+    "ok", "timeout", "connect_error", "status_error", "invalid_json",
+    "bad_word_id", "missing_word", "too_long", "truncated", "empty",
 })
+
+
+def _make_status_error() -> APIStatusError:
+    """构造一个 4xx APIStatusError（与真实客户端 _retry_connect 原样上抛的形状一致）。"""
+    return APIStatusError(
+        "mock 4xx",
+        response=httpx.Response(401, request=httpx.Request("POST", "http://mock")),
+        body=None,
+    )
 
 
 class MockAdapter:
@@ -30,6 +42,8 @@ class MockAdapter:
             return
         if self.scenario == "connect_error":
             raise LLMConnectError("mock connect error")
+        if self.scenario == "status_error":
+            raise _make_status_error()
         if self.scenario == "too_long":
             # 单个超长 token：chunker 不断词，validate_speech 判超长 → 降级
             yield TextDelta(text="A" * 250)
@@ -52,6 +66,8 @@ class MockAdapter:
             await asyncio.sleep(60)
         if self.scenario == "connect_error":
             raise LLMConnectError("mock connect error")
+        if self.scenario == "status_error":
+            raise _make_status_error()
         if self.scenario == "invalid_json":
             raise JsonParseError("mock invalid json")
         word = self._word_from_messages(messages)

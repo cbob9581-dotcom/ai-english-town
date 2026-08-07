@@ -1,27 +1,51 @@
-"""浏览器实时连接：音频二进制 + 控制 JSON。阶段 1 的浏览器端 VAD = 前端 RMS 门限；
-服务端 VAD 状态机在此驱动（阶段 2 换真实 Silero 帧标签）。"""
+"""浏览器实时连接：音频二进制 + 控制 JSON。回合跑独立 asyncio 任务（可取消）；
+playbackState + barge-in + spurious 守卫 + append-only 打断 + 双端过期丢弃（服务端侧）。"""
 from __future__ import annotations
 
+import asyncio
+import base64
 import json
+import uuid
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket
 
+from app.settings import Settings
 from app.voice_round import run_round
-from app.workers import asr_client, tts_client
 
 router = APIRouter()
 
-ASR_URL = "http://127.0.0.1:8001/transcribe"
-TTS_BASE = "http://127.0.0.1:8002"
+
+class SessionState:
+    def __init__(self, settings: Settings) -> None:
+        self.generation_id = f"gen_{uuid.uuid4().hex[:8]}"
+        self.round_task: asyncio.Task | None = None
+        self.active_turn_id: str | None = None
+        self.is_playing = False
+        self.played_ms = 0
+        self.utterance_id: str | None = None
+        self.frames: list[bytes] = []
+        self.audio_start_armed = False
+        self.barge_in_armed = False
+        self.pending_asks: dict[str, asyncio.Task] = {}
+        self.semaphore = asyncio.Semaphore(settings.llm_concurrency_limit)
+        self.spurious_window_s = 0.5
+        self._turn_seq = 0
+
+    def new_turn_id(self) -> str:
+        self._turn_seq += 1
+        return f"turn_{uuid.uuid4().hex[:8]}_{self._turn_seq}"
 
 
 @router.websocket("/ws/sessions/{session_id}")
 async def ws_session(ws: WebSocket) -> None:
     await ws.accept()
-    events = ws.app.state.events
+    app = ws.app
+    events = app.state.events
+    settings = app.state.settings
     session_id = ws.path_params["session_id"]
-    utterance_id: str | None = None
-    frames: list[bytes] = []
+    sessions: dict[str, SessionState] = app.state.sessions
+    state = sessions.get(session_id) or SessionState(settings)
+    sessions[session_id] = state
 
     async def send(payload: object) -> None:
         if isinstance(payload, bytes):
@@ -29,30 +53,78 @@ async def ws_session(ws: WebSocket) -> None:
         else:
             await ws.send_json(payload)
 
-    try:
-        while True:
-            msg = await ws.receive()
-            if msg["type"] == "websocket.disconnect":
-                return  # 原始 receive() 不抛 WebSocketDisconnect，这里显式退出，避免下一次 receive 抛 RuntimeError
-            if msg.get("text"):
-                ctrl = json.loads(msg["text"])
-                if ctrl["type"] == "audio.start":
-                    utterance_id = ctrl["utteranceId"]
-                    frames = []
-                elif ctrl["type"] == "audio.end":
-                    if utterance_id is not None and frames:
-                        await run_round(
-                            session_id, utterance_id, b"".join(frames), events,
-                            lambda audio: asr_client(audio, ASR_URL),
-                            lambda text: tts_client(text, TTS_BASE),
-                            send,
-                        )
-                    utterance_id = None
-                elif ctrl["type"] == "playback.interrupted":
-                    events.append(session_id, "playback.interrupted", {"utteranceId": utterance_id})
-            else:
-                raw = msg.get("bytes")
-                if raw and utterance_id is not None:
-                    frames.append(raw)
-    except WebSocketDisconnect:
-        return
+    async def _spurious_guard() -> None:
+        await asyncio.sleep(state.spurious_window_s)
+        if state.audio_start_armed:
+            # 无任何帧到达 → 忽略这次 audio.start（不取消回合、不记打断）
+            state.audio_start_armed = False
+            state.barge_in_armed = False
+
+    async def _cancel_and_interrupt() -> None:
+        state.is_playing = False
+        task = state.round_task
+        turn_id = state.active_turn_id
+        if task and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        if turn_id:
+            events.append(session_id, "dialogue.turn.interrupted", {
+                "generationId": state.generation_id, "turnId": turn_id,
+                "playedMs": state.played_ms,
+            })
+        state.round_task = None
+        state.active_turn_id = None
+
+    async def _run_round(payload: bytes, utterance_id: str) -> None:
+        budget_exceeded = app.state.llm_log.count_session_calls(session_id) >= settings.llm_session_call_cap
+        try:
+            async with state.semaphore:
+                await run_round(session_id, utterance_id, payload, events,
+                                app.state.asr_client, app.state.tts_client, send,
+                                app.state.actor, state, budget_exceeded=budget_exceeded)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001 —— 回合失败不杀连接
+            await send({"type": "round.error", "turnId": state.active_turn_id, "error": str(e)})
+        finally:
+            state.round_task = None
+
+    while True:
+        msg = await ws.receive()
+        if msg["type"] == "websocket.disconnect":
+            if state.round_task and not state.round_task.done():
+                state.round_task.cancel()
+            return
+        if msg.get("text"):
+            ctrl = json.loads(msg["text"])
+            t = ctrl["type"]
+            if t == "audio.start":
+                state.utterance_id = ctrl.get("utteranceId")
+                state.frames = []
+                state.audio_start_armed = True
+                state.barge_in_armed = state.is_playing or (
+                    state.round_task is not None and not state.round_task.done())
+                asyncio.create_task(_spurious_guard())
+            elif t == "audio.end":
+                if state.utterance_id is not None and state.frames:
+                    payload = b"".join(state.frames)
+                    state.round_task = asyncio.create_task(_run_round(payload, state.utterance_id))
+                state.utterance_id = None
+                state.audio_start_armed = False
+                state.barge_in_armed = False
+            elif t == "playback.interrupted":
+                await _cancel_and_interrupt()
+            # companion.ask 分支由 Task 8 加入（ws_session 路由 + _handle_companion_ask 实现一起落）
+        else:
+            raw = msg.get("bytes")
+            if raw:
+                if state.audio_start_armed:
+                    state.audio_start_armed = False
+                    if state.barge_in_armed:
+                        await _cancel_and_interrupt()
+                    state.barge_in_armed = False
+                if state.utterance_id is not None:
+                    state.frames.append(raw)

@@ -58,6 +58,17 @@ async def test_connect_error_degrades() -> None:
     assert log.rows[-1]["attempt"] == 2  # 连接错误内部已重试一次
 
 
+async def test_api_status_error_degrades() -> None:
+    # 4xx openai.APIStatusError（401/403/429/422…）不重试原样上抛 → 按 connect 类降级 scripted
+    actor, log = make_actor("status_error")
+    msgs = [m async for m in actor.stream_reply(**KW)]
+    assert [m["type"] for m in msgs] == ["npc.speech.delta", "npc.speech.commit", "npc.turn.metadata"]
+    commit = [m for m in msgs if m["type"] == "npc.speech.commit"][0]
+    assert commit["text"] == fallback("hello")
+    assert log.rows[-1]["fallback_reason"] == "connect"
+    assert log.rows[-1]["ok"] is False
+
+
 async def test_too_long_degrades_not_truncated() -> None:
     actor, log = make_actor("too_long")
     msgs = [m async for m in actor.stream_reply(**KW)]

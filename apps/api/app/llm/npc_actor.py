@@ -7,6 +7,8 @@ import json
 import time
 from collections.abc import AsyncIterator, Callable, Iterator
 
+from openai import APIStatusError
+
 from app.llm.chunker import SentenceChunker
 from app.llm.client import LLMAdapter, LLMConnectError
 from app.llm.lexmatch import derive_candidate_word_ids
@@ -155,6 +157,10 @@ class NpcActor:
             reason = "timeout"
             error = "total timeout"
         except LLMConnectError as e:
+            reason = "connect"
+            error = str(e)
+        except APIStatusError as e:
+            # 4xx 业务失败（401/403/429/422…）client 不重试、原样上抛 → 按 connect 类降级 scripted
             reason = "connect"
             error = str(e)
         except ProposalError as e:
