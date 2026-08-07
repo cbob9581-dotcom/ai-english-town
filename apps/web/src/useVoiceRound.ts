@@ -4,12 +4,16 @@ import { RmsGate } from './audio/rms-gate';
 import { VoiceSocket } from './audio/ws-client';
 import { AudioQueue } from './audio/playback-queue';
 import { createWavPlayer, type PlaybackHandle, type WavPlayer } from './audio/playback';
+import { isAcceptedTurn } from './audio/turnGate';
 import type { Turn } from './DialogueDock';
+
+interface CompanionState { word: string; scaffold: string; }
 
 export function useVoiceRound(sessionId: string, wsUrl: string) {
   const [micOn, setMicOn] = useState(false);
   const [status, setStatus] = useState('idle');
   const [turns, setTurns] = useState<Turn[]>([]);
+  const [companion, setCompanion] = useState<CompanionState | null>(null);
   const socketRef = useRef<VoiceSocket | null>(null);
   const queueRef = useRef(new AudioQueue());
   const micRef = useRef<Mic | null>(null);
@@ -17,30 +21,125 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
   const playerRef = useRef<WavPlayer | null>(null);
   const activePlaybackRef = useRef<PlaybackHandle | null>(null);
   const uttRef = useRef(0);
+  const listeningRef = useRef(false);
+  const currentTurnIdRef = useRef<string | null>(null);
+  const companionTurnIdRef = useRef<string | null>(null);
+  const audioTurnIdRef = useRef<string | null>(null);
 
   const ensurePlayer = () => {
     if (!playerRef.current) playerRef.current = createWavPlayer();
     return playerRef.current;
   };
 
+  const stopPlayback = () => {
+    activePlaybackRef.current?.stop();
+    activePlaybackRef.current = null;
+  };
+
+  const nextUtterance = () => `u${++uttRef.current}`;
+
+  /** delta 累积：同一 turnId 的句子追加到字幕（空格拼接）。 */
+  const appendDelta = (turnId: string, sentence: string) => {
+    setTurns((t) => {
+      const copy = [...t];
+      const last = copy[copy.length - 1];
+      if (last && last.role === 'npc' && last.turnId === turnId) {
+        copy[copy.length - 1] = { ...last, text: last.text ? `${last.text} ${sentence}` : sentence };
+      } else {
+        copy.push({ role: 'npc', turnId, text: sentence });
+      }
+      return copy;
+    });
+  };
+
+  /** commit 是权威全文：覆盖已累积的 delta 字幕。 */
+  const applyCommit = (turnId: string, text: string) => {
+    setTurns((t) => {
+      const copy = [...t];
+      const last = copy[copy.length - 1];
+      if (last && last.role === 'npc' && last.turnId === turnId) {
+        copy[copy.length - 1] = { ...last, text };
+      } else {
+        copy.push({ role: 'npc', turnId, text });
+      }
+      return copy;
+    });
+  };
+
+  const applyMetadata = (turnId: string, candidateWordIds: string[]) => {
+    setTurns((t) => {
+      const copy = [...t];
+      const last = copy[copy.length - 1];
+      if (last && last.role === 'npc' && last.turnId === turnId) {
+        copy[copy.length - 1] = { ...last, candidateWordIds };
+      }
+      return copy;
+    });
+  };
+
   const start = async () => {
     const sock = new VoiceSocket(sessionId);
     await sock.connect(wsUrl);
     socketRef.current = sock;
-    sock.on('npc.speech.commit', (m: any) => setTurns((t) => [...t, { role: 'npc', text: m.text }]));
-    sock.on('tts.audio.start', () => setStatus('speaking'));
-    sock.on('tts.audio.end', () => {
-      setStatus('idle');
-      // 阶段 1：服务器在 start/end 之间发单块完整 WAV；end 时取出并播放
+
+    sock.on('npc.speech.delta', (m: any) => {
+      if (!isAcceptedTurn(currentTurnIdRef.current, companionTurnIdRef.current, m.turnId)) return;
+      if (currentTurnIdRef.current === null) currentTurnIdRef.current = m.turnId;
+      appendDelta(m.turnId, (m.text ?? '').trim());
+    });
+    sock.on('npc.speech.commit', (m: any) => {
+      if (!isAcceptedTurn(currentTurnIdRef.current, companionTurnIdRef.current, m.turnId)) return;
+      if (currentTurnIdRef.current === null) currentTurnIdRef.current = m.turnId;
+      applyCommit(m.turnId, m.text);
+    });
+    sock.on('npc.turn.metadata', (m: any) => {
+      if (!isAcceptedTurn(currentTurnIdRef.current, companionTurnIdRef.current, m.turnId)) return;
+      applyMetadata(m.turnId, m.candidateWordIds ?? []);
+    });
+    sock.on('companion.reply', (m: any) => {
+      if (m.error) return;
+      companionTurnIdRef.current = m.turnId;
+      setCompanion({ word: m.word, scaffold: m.scaffold });
+    });
+    sock.on('tts.audio.start', (m: any) => {
+      if (!isAcceptedTurn(currentTurnIdRef.current, companionTurnIdRef.current, m.turnId)) {
+        queueRef.current.clear();
+        audioTurnIdRef.current = null;
+        return;
+      }
+      audioTurnIdRef.current = m.turnId;
+      gateRef.current.setDucking(true);
+      setStatus('speaking');
+    });
+    sock.on('tts.audio.end', (m: any) => {
+      if (audioTurnIdRef.current !== m.turnId) return;
+      audioTurnIdRef.current = null;
+      gateRef.current.setDucking(false);
+      stopPlayback();
       const item = queueRef.current.next();
       if (item) activePlaybackRef.current = ensurePlayer().play(item.buffer);
+      setStatus('idle');
     });
-    sock.on('audio.binary', (chunk) => queueRef.current.enqueue('x', chunk as ArrayBuffer));
+    sock.on('audio.binary', (chunk) => {
+      if (audioTurnIdRef.current !== null) queueRef.current.enqueue(audioTurnIdRef.current, chunk as ArrayBuffer);
+    });
+
     const mic = new Mic();
     mic.onChunk = (chunk) => {
-      sock.sendAudioChunk(chunk);          // 转发音频帧到服务器（brief 漏了这行）
+      sock.sendAudioChunk(chunk);
       const tag = gateRef.current.feed(chunk);
-      if (tag === 'end') { sock.sendControl({ type: 'audio.end', utteranceId: `u${uttRef.current}` }); setStatus('listening'); }
+      if (tag === 'speech' && !listeningRef.current) {
+        // 语音触发开始；若正在播放 → 本地立即停播（barge-in 本地清理），audio.start 即打断信号
+        stopPlayback();
+        currentTurnIdRef.current = null;  // RULING 1：新一轮从空 current 开始
+        listeningRef.current = true;
+        sock.sendControl({ type: 'audio.start', utteranceId: nextUtterance(), languageMode: 'en' });
+        setStatus('listening');
+      } else if (tag === 'end' && listeningRef.current) {
+        sock.sendControl({ type: 'audio.end', utteranceId: `u${uttRef.current}` });
+        listeningRef.current = false;
+        setStatus('idle');
+      }
     };
     await mic.start();
     micRef.current = mic;
@@ -48,29 +147,29 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
   };
 
   const beginUtterance = () => {
-    uttRef.current += 1;
-    socketRef.current?.sendControl({ type: 'audio.start', utteranceId: `u${uttRef.current}`, languageMode: 'en' });
+    if (listeningRef.current) return;
+    currentTurnIdRef.current = null;  // RULING 1：新一轮从空 current 开始
+    listeningRef.current = true;
+    socketRef.current?.sendControl({ type: 'audio.start', utteranceId: nextUtterance(), languageMode: 'en' });
   };
 
   const stop = () => {
-    activePlaybackRef.current?.stop();
-    activePlaybackRef.current = null;
+    stopPlayback();
     micRef.current?.stop();
     socketRef.current?.close();
     setMicOn(false);
   };
 
   const interrupt = () => {
-    activePlaybackRef.current?.stop();
-    activePlaybackRef.current = null;
+    stopPlayback();
+    listeningRef.current = false;
     socketRef.current?.sendControl({ type: 'playback.interrupted' });
     queueRef.current.clear();
   };
 
-  const askCompanion = (word: string) => {
-    // 阶段 1 占位：后续接 askCompanion 触发 TTS 读单词
-    alert(`(阶段1占位) 伴学者读：${word}`);
+  const askCompanion = (entityId: string) => {
+    socketRef.current?.sendControl({ type: 'companion.ask', entityId });
   };
 
-  return { micOn, status, turns, start, stop, beginUtterance, interrupt, askCompanion };
+  return { micOn, status, turns, companion, start, stop, beginUtterance, interrupt, askCompanion };
 }

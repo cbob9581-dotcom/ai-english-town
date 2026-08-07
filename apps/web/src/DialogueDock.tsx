@@ -1,4 +1,4 @@
-export interface Turn { role: 'user' | 'npc'; text: string; }
+export interface Turn { role: 'user' | 'npc'; text: string; turnId?: string; candidateWordIds?: string[]; }
 
 export function DialogueDock({ turns, status }: { turns: Turn[]; status: string }) {
   return (

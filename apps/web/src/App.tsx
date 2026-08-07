@@ -4,12 +4,13 @@ import { SceneViewport } from './SceneViewport';
 import { DialogueDock } from './DialogueDock';
 import { useVoiceRound } from './useVoiceRound';
 import { CompanionPopover } from './CompanionPopover';
+import type { Entity } from './types';
 
 export default function App() {
   const [scene, setScene] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [focusWord, setFocusWord] = useState<string | null>(null);
-  const { micOn, status, turns, start, stop, beginUtterance, interrupt, askCompanion } = useVoiceRound('sess-1', `ws://${location.hostname}:8000/ws/sessions/sess-1`);
+  const [focusEntity, setFocusEntity] = useState<Entity | null>(null);
+  const { micOn, status, turns, companion, start, stop, beginUtterance, interrupt, askCompanion } = useVoiceRound('sess-1', `ws://${location.hostname}:8000/ws/sessions/sess-1`);
 
   useEffect(() => {
     fetchScene('scene_bakery_001').then(setScene).catch((e) => setError(String(e)));
@@ -28,10 +29,10 @@ export default function App() {
         <button onClick={interrupt}>打断</button>
       </header>
       <div style={{ flex: 1, padding: 16, position: 'relative' }}>
-        <SceneViewport scene={scene} onEntityClick={(e) => setFocusWord(e.semantics.name)} />
+        <SceneViewport scene={scene} onEntityClick={(e) => setFocusEntity(e)} />
       </div>
       <DialogueDock turns={turns} status={status} />
-      {focusWord && <CompanionPopover word={focusWord} onAsk={askCompanion} onClose={() => setFocusWord(null)} />}
+      {focusEntity && <CompanionPopover entity={focusEntity} companion={companion} onAsk={askCompanion} onClose={() => setFocusEntity(null)} />}
     </div>
   );
 }
