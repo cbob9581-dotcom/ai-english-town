@@ -25,6 +25,7 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
   const currentTurnIdRef = useRef<string | null>(null);
   const companionTurnIdRef = useRef<string | null>(null);
   const audioTurnIdRef = useRef<string | null>(null);
+  const lastTurnIdRef = useRef<string | null>(null);
 
   const ensurePlayer = () => {
     if (!playerRef.current) playerRef.current = createWavPlayer();
@@ -84,16 +85,25 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
 
     sock.on('npc.speech.delta', (m: any) => {
       if (!isAcceptedTurn(currentTurnIdRef.current, companionTurnIdRef.current, m.turnId)) return;
-      if (currentTurnIdRef.current === null) currentTurnIdRef.current = m.turnId;
+      if (currentTurnIdRef.current === null) {
+        // null 窗口（新一轮刚开始）：丢弃上一轮尾部迟到的消息，仅真正的新 turnId 可 bootstrap
+        if (m.turnId === lastTurnIdRef.current) return;
+        currentTurnIdRef.current = m.turnId;
+      }
       appendDelta(m.turnId, (m.text ?? '').trim());
     });
     sock.on('npc.speech.commit', (m: any) => {
       if (!isAcceptedTurn(currentTurnIdRef.current, companionTurnIdRef.current, m.turnId)) return;
-      if (currentTurnIdRef.current === null) currentTurnIdRef.current = m.turnId;
+      if (currentTurnIdRef.current === null) {
+        if (m.turnId === lastTurnIdRef.current) return;
+        currentTurnIdRef.current = m.turnId;
+      }
+      lastTurnIdRef.current = m.turnId;  // 上一轮完整结束：记录其 turnId，供下一次 null 窗口拒收尾部
       applyCommit(m.turnId, m.text);
     });
     sock.on('npc.turn.metadata', (m: any) => {
       if (!isAcceptedTurn(currentTurnIdRef.current, companionTurnIdRef.current, m.turnId)) return;
+      if (currentTurnIdRef.current === null && m.turnId === lastTurnIdRef.current) return;
       applyMetadata(m.turnId, m.candidateWordIds ?? []);
     });
     sock.on('companion.reply', (m: any) => {
@@ -103,6 +113,11 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
     });
     sock.on('tts.audio.start', (m: any) => {
       if (!isAcceptedTurn(currentTurnIdRef.current, companionTurnIdRef.current, m.turnId)) {
+        queueRef.current.clear();
+        audioTurnIdRef.current = null;
+        return;
+      }
+      if (currentTurnIdRef.current === null && m.turnId === lastTurnIdRef.current) {
         queueRef.current.clear();
         audioTurnIdRef.current = null;
         return;
@@ -132,6 +147,8 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
         // 语音触发开始；若正在播放 → 本地立即停播（barge-in 本地清理），audio.start 即打断信号
         stopPlayback();
         currentTurnIdRef.current = null;  // RULING 1：新一轮从空 current 开始
+        queueRef.current.clear();         // 清掉上一轮仍在队列里的音频 chunk
+        audioTurnIdRef.current = null;    // 停止接收迟到的 audio.binary 入队
         listeningRef.current = true;
         sock.sendControl({ type: 'audio.start', utteranceId: nextUtterance(), languageMode: 'en' });
         setStatus('listening');
