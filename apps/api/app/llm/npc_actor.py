@@ -134,6 +134,8 @@ class NpcActor:
                     remainder = chunker.finalize()
                     if remainder:
                         validate_speech(remainder, self._settings.llm_max_speech_chars)
+                        if emitted_chars + len(remainder) > self._settings.llm_max_speech_chars:
+                            raise ProposalError("cumulative speech over limit")
                         sentences.append(remainder)
                         sent_any = True
                         yield {"type": "npc.speech.delta", "generationId": generation_id,

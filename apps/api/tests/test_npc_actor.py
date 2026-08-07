@@ -98,3 +98,18 @@ async def test_cumulative_length_degrades() -> None:
     commit = [m for m in msgs if m["type"] == "npc.speech.commit"][0]
     assert commit["text"] == fallback("hello")
     assert log.rows[-1]["fallback_reason"] == "schema_reject"
+
+
+async def test_remainder_over_cap_degrades() -> None:
+    # finalize() 余量：完整句子合计略低于 cap（15 字符→emitted 16），trailing 无终止符片段
+    # 单独过 validate_speech（18<30）但累计 34>30 → 整轮降级 schema_reject，不发超限 commit。
+    text = "A loaf is here. please help me sir"
+    actor, log = make_actor(stream_text_override=text, llm_max_speech_chars=30)
+    msgs = [m async for m in actor.stream_reply(**KW)]
+    commit = [m for m in msgs if m["type"] == "npc.speech.commit"][0]
+    assert commit["text"] == fallback("hello")          # 无超限 commit 文本
+    assert log.rows[-1]["fallback_reason"] == "schema_reject"
+    assert log.rows[-1]["ok"] is False
+    delta_texts = [m["text"] for m in msgs if m["type"] == "npc.speech.delta"]
+    assert "please help me sir" not in delta_texts       # 超限片段绝不被发出
+    assert delta_texts[-1] == fallback("hello")
