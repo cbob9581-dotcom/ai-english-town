@@ -1482,6 +1482,52 @@ async def test_scene_request_transitions_and_increments_generation(tmp_path) -> 
     assert len(gens) == 2                                                  # 每进场 generationId 递增
 ```
 
+- [ ] **Step 7b: 服务端门控测试（test_scene_gates.py）**
+
+> 用户裁决（2026-08-08）：Task 4 Files 清单声明的 `test_scene_gates.py` 原无 Step 定义内容。裁决 = Task 4 补此文件。门控矩阵（§3）中 Task 4 服务端只做"转场 cancel + generation_id 属性"；消息级 genId 检查在 Task 9 前端。本文件覆盖服务端侧可测的门控不变量。
+
+```python
+# apps/api/tests/test_scene_gates.py
+import asyncio
+import re
+
+import pytest
+
+from app.settings import Settings
+from app.ws import SessionState, ws_session
+from tests.ws_helpers import FakeWS, make_app
+
+
+class _FakeScene:
+    generation_id = "gen_abcd1234"
+
+
+def test_generation_id_property_falls_back_then_tracks_scene() -> None:
+    st = SessionState(Settings())
+    assert re.fullmatch(r"gen_[0-9a-f]{8}", st.generation_id)   # 无 scene → 回退
+    st.scene = _FakeScene()
+    assert st.generation_id == "gen_abcd1234"                   # 有 scene → 跟随
+
+
+async def test_invalid_exit_id_does_not_transition(tmp_path) -> None:
+    events, app = make_app(tmp_path, scenario="ok")
+    ws = FakeWS([
+        {"type": "websocket.receive", "text": '{"type":"scene.request","exitId":"nowhere"}'},
+    ], app)
+    task = asyncio.create_task(ws_session(ws))
+    await asyncio.sleep(0.1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    st = app.state.sessions["sess-x"]
+    assert st.scene is not None and st.scene.archetype_id == "plaza"   # 未知出口 → 不转场
+    skels = [m for m in ws.sent if isinstance(m, dict) and m.get("type") == "scene.skeleton"]
+    assert len(skels) == 1                                              # 仅进场那次 skeleton
+```
+
+Run: `cd apps/api && uv run pytest tests/test_scene_gates.py -v`
+Expected: PASS（`target_for` 对未知 exitId 返回 `None`，ws.py 的 `if target:` 分支不转场）。
+
 - [ ] **Step 8: 运行全部 API 测试确认回归绿**
 
 Run: `cd apps/api && uv run pytest -v`
@@ -1490,7 +1536,7 @@ Expected: PASS（含更新后的 test_ws.py；`test_state_audit` 仍断言 3 张
 - [ ] **Step 9: 提交**
 
 ```bash
-git add apps/api/app/scene_lifecycle.py apps/api/app/arbitration.py apps/api/app/ws.py apps/api/app/main.py apps/api/app/settings.py apps/api/app/llm/npc_actor.py apps/api/tests/test_ws.py apps/api/tests/test_scene_lifecycle.py apps/api/tests/test_arbitration.py
+git add apps/api/app/scene_lifecycle.py apps/api/app/arbitration.py apps/api/app/ws.py apps/api/app/main.py apps/api/app/settings.py apps/api/app/llm/npc_actor.py apps/api/tests/test_ws.py apps/api/tests/test_scene_lifecycle.py apps/api/tests/test_arbitration.py apps/api/tests/test_scene_gates.py
 git commit -m "feat(scene): per-session lifecycle + WS scene protocol + per-scene generationId"
 ```
 
