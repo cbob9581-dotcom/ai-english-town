@@ -8,6 +8,7 @@ import json
 from app.event_store import EventStore
 from app.llm.mock import MockAdapter
 from app.main import create_app
+from app.settings import Settings
 
 
 class FakeWS:
@@ -75,7 +76,9 @@ def make_app(tmp_path, scenario: str = "ok", slow_delta_s: float = 0.0,
     async def fake_tts(text: str):
         return {"audioBase64": base64.b64encode(b"\x00\x00\x00\x00").decode(), "ms": 30, "sampleRate": 16000}
 
-    app = create_app(events, asr_client=fake_asr, tts_client=fake_tts,
+    # tutor 缓存目录指向 tmp_path，避免测试把 wav 落进仓库 data/tutor-audio（hermetic）
+    app = create_app(events, Settings(tutor_cache_dir=tmp_path / "tutor-audio"),
+                     asr_client=fake_asr, tts_client=fake_tts,
                      llm_client=MockAdapter(scenario, stream_text_override=stream_text_override))
     app.state.actor = SlowActor(app.state.actor)
     return events, app

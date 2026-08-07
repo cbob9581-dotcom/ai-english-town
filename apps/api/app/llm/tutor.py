@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable
 
+from openai import APIStatusError
+
 from app.llm.client import JsonParseError, LLMAdapter, LLMConnectError
 from app.llm.proposals import ProposalError, validate_tutor
 from app.llm.tutor_cache import TutorCache
@@ -103,6 +105,9 @@ class CompanionTutor:
         except TimeoutError:
             reason, error = "timeout", "tutor total timeout"
         except LLMConnectError as e:
+            reason, error = "connect", str(e)
+        except APIStatusError as e:
+            # 4xx 业务失败（401/403/429/422…）client 不重试、原样上抛 → 按 connect 类降级只读单词
             reason, error = "connect", str(e)
         except JsonParseError as e:
             reason, error = "invalid_json", str(e)

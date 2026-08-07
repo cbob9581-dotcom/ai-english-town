@@ -5,6 +5,7 @@ from fastapi import FastAPI, HTTPException
 from app.event_store import EventStore
 from app.llm.client import get_client
 from app.llm.npc_actor import NpcActor
+from app.llm.tutor import CompanionTutor
 from app.llm.tutor_cache import TutorCache
 from app.llm_log import LlmLog
 from app.scene_store import SceneStore
@@ -34,8 +35,11 @@ def create_app(events: EventStore | None = None, settings: Settings | None = Non
     llm_log = LlmLog(events.connection)
     cache = TutorCache(events.connection, settings.tutor_cache_dir)
     client = llm_client or get_client(settings)
+    asr_impl = asr_client or (lambda audio: worker_asr(audio, f"{ASR_URL}/transcribe"))
+    tts_impl = tts_client or (lambda text: worker_tts(text, TTS_BASE))
     actor = NpcActor(client, settings, llm_log, scene_words,
                      lambda u: scripted_reply(u)["speech"])
+    tutor = CompanionTutor(client, settings, llm_log, cache, tts_impl)
 
     app = FastAPI(title="english-town-api", version="0.2.0")
     app.state.events = events
@@ -46,8 +50,9 @@ def create_app(events: EventStore | None = None, settings: Settings | None = Non
     app.state.llm_log = llm_log
     app.state.tutor_cache = cache
     app.state.actor = actor
-    app.state.asr_client = asr_client or (lambda audio: worker_asr(audio, f"{ASR_URL}/transcribe"))
-    app.state.tts_client = tts_client or (lambda text: worker_tts(text, TTS_BASE))
+    app.state.tutor = tutor
+    app.state.asr_client = asr_impl
+    app.state.tts_client = tts_impl
     app.state.sessions = {}
 
     from app.ws import router as ws_router

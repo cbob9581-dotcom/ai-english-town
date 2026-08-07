@@ -83,6 +83,16 @@ async def test_invalid_json_degrades_to_word_only(tmp_path) -> None:
     assert log.rows[-1]["fallback_reason"] == "invalid_json" and log.rows[-1]["ok"] is False
 
 
+async def test_api_status_error_degrades_to_word_only(tmp_path) -> None:
+    # 4xx openai.APIStatusError（401/403/429/422…）不重试原样上抛 → 按 connect 类降级只读单词
+    tutor, log, cache = make_tutor(tmp_path, "status_error")
+    res = await tutor.reply(session_id="s1", generation_id="g1", word_id="word_loaf_n_1", word="loaf")
+    assert res.word == "loaf" and res.scaffold == ""
+    assert res.degraded is True
+    assert res.audio_base64 is not None   # 仍读单词
+    assert log.rows[-1]["fallback_reason"] == "connect" and log.rows[-1]["ok"] is False
+
+
 async def test_bad_word_degrades(tmp_path) -> None:
     tutor, log, cache = make_tutor(tmp_path, "bad_word_id")
     res = await tutor.reply(session_id="s1", generation_id="g1", word_id="word_loaf_n_1", word="loaf")
