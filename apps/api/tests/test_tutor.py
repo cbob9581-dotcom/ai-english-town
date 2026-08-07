@@ -1,4 +1,5 @@
 import base64
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 import pytest
@@ -21,13 +22,15 @@ def make_tts(tts_calls: list):
     return tts_client
 
 
-def make_tutor(tmp_path: Path, scenario: str = "ok", tts_calls: list | None = None):
+def make_tutor(tmp_path: Path, scenario: str = "ok", tts_calls: list | None = None,
+               tts_client: Callable[[str], Awaitable[dict]] | None = None):
     events = EventStore(tmp_path / "e.db")
     cache = TutorCache(events.connection, tmp_path / "audio")
     log = FakeLlmLog()
     calls = tts_calls if tts_calls is not None else []
+    client = tts_client if tts_client is not None else make_tts(calls)
     tutor = CompanionTutor(MockAdapter(scenario), Settings(llm_total_timeout_tutor_s=1.0),
-                           log, cache, make_tts(calls))
+                           log, cache, client)
     return tutor, log, cache
 
 
@@ -45,15 +48,30 @@ async def test_cache_miss_calls_llm_and_tts(tmp_path) -> None:
 
 
 async def test_cache_hit_zero_llm_tts(tmp_path) -> None:
-    tutor, log, cache = make_tutor(tmp_path)
     calls: list = []
-    tutor2, _, _ = make_tutor(tmp_path, tts_calls=calls)
+    tutor2, log2, _ = make_tutor(tmp_path, tts_calls=calls)
     await tutor2.reply(session_id="s1", generation_id="g1", word_id="word_loaf_n_1", word="loaf")
+    rows_after_miss = len(log2.rows)          # 第一次 miss：LLM 调用已记录
     res = await tutor2.reply(session_id="s1", generation_id="g1", word_id="word_loaf_n_1", word="loaf")
     assert res.from_cache is True
     assert res.audio_base64 is not None
-    assert calls == ["loaf"]        # 第二次命中：0 TTS
-    assert log.rows == []           # 命中缓存：0 LLM 调用（不写 llm_calls）
+    assert calls == ["loaf"]                  # 第二次命中：0 TTS
+    assert len(log2.rows) == rows_after_miss  # 命中缓存：0 LLM 调用（不写 llm_calls）
+
+
+async def test_tts_failure_degrades_keeps_scaffold(tmp_path) -> None:
+    async def failing_tts(text: str):
+        raise RuntimeError("tts down")
+
+    tutor, log, cache = make_tutor(tmp_path, tts_client=failing_tts)
+    res = await tutor.reply(session_id="s1", generation_id="g1", word_id="word_loaf_n_1", word="loaf")
+    assert "loaf" in res.scaffold              # LLM 成功 → scaffold 保留
+    assert res.audio_base64 is None            # TTS 失败 → 无音频
+    assert res.sample_rate is None
+    assert res.degraded is True and res.from_cache is False
+    assert log.rows[-1]["role"] == "companion_tutor" and log.rows[-1]["ok"] is True
+    assert log.rows[-1]["fallback_reason"] == "none"
+    assert cache.get("word_loaf_n_1") is None  # TTS 失败 → 缓存写不入
 
 
 async def test_invalid_json_degrades_to_word_only(tmp_path) -> None:

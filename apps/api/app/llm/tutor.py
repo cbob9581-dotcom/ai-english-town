@@ -84,13 +84,20 @@ class CompanionTutor:
             validate_tutor(res.json.get("word", ""), res.json.get("scaffold", ""),
                            expected_word=word, max_scaffold_chars=self._settings.llm_max_scaffold_chars)
             scaffold = res.json["scaffold"]
-            audio_b64, sample_rate = await self._synthesize_word(word)
-            audio_path = str(self._cache.audio_path(word_id))
-            Path(audio_path).write_bytes(base64.b64decode(audio_b64))
-            self._cache.put(word_id, scaffold, self._settings.llm_model, audio_path, sample_rate)
+            # LLM+scaffold 已成功：llm_calls 记 ok=True（latency 覆盖 LLM 调用段）。
+            # 下方 TTS / 音频写盘 / 缓存写行的失败不得逃出 reply()——降级为无音频
+            # （scaffold 保留，degraded=True），带读不因 TTS 失败整条失败。
             self._record(session_id=session_id, generation_id=generation_id, reason="none",
                          ok=True, latency_ms=int((time.perf_counter() - t0) * 1000),
                          ttft_ms=int((time.perf_counter() - t0) * 1000), tokens=res.usage)
+            try:
+                audio_b64, sample_rate = await self._synthesize_word(word)
+                audio_path = str(self._cache.audio_path(word_id))
+                Path(audio_path).write_bytes(base64.b64decode(audio_b64))
+                self._cache.put(word_id, scaffold, self._settings.llm_model, audio_path, sample_rate)
+            except Exception:  # noqa: BLE001 —— TTS/写盘/缓存失败：返回无音频降级结果
+                return TutorResult(word=word, scaffold=scaffold, audio_base64=None,
+                                   sample_rate=None, from_cache=False, degraded=True)
             return TutorResult(word=word, scaffold=scaffold, audio_base64=audio_b64,
                                sample_rate=sample_rate, from_cache=False, degraded=False)
         except TimeoutError:
