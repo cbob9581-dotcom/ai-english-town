@@ -9,6 +9,9 @@ import uuid
 
 from fastapi import APIRouter, WebSocket
 
+from app.arbitration import ArbitrationState
+from app.scene_lifecycle import enter_scene, scene_maps
+from app.llm.concepts import resolve_word_id  # noqa: F401
 from app.settings import Settings
 from app.voice_round import run_round
 
@@ -17,7 +20,12 @@ router = APIRouter()
 
 class SessionState:
     def __init__(self, settings: Settings) -> None:
-        self.generation_id = f"gen_{uuid.uuid4().hex[:8]}"
+        self._fallback_generation = f"gen_{uuid.uuid4().hex[:8]}"
+        self.scene = None                    # SceneSession | None（Task 4）
+        self.scene_seq = 0
+        self.fill_task = None
+        self.arbitration = ArbitrationState()
+        self.actor = None                    # Task 4：每场景重建（persona 动态）
         self.round_task: asyncio.Task | None = None
         self.active_turn_id: str | None = None
         self.is_playing = False
@@ -31,6 +39,10 @@ class SessionState:
         self.semaphore = asyncio.Semaphore(settings.llm_concurrency_limit)
         self.spurious_window_s = 0.5
         self._turn_seq = 0
+
+    @property
+    def generation_id(self) -> str:
+        return self.scene.generation_id if self.scene else self._fallback_generation
 
     def new_turn_id(self) -> str:
         self._turn_seq += 1
@@ -53,6 +65,10 @@ async def ws_session(ws: WebSocket) -> None:
             await ws.send_bytes(payload)
         else:
             await ws.send_json(payload)
+
+    if state.scene is None:
+        await enter_scene(app, events, state, session_id, send,
+                          target_archetype_id=None, source="connect")
 
     async def _spurious_guard() -> None:
         try:
@@ -88,7 +104,7 @@ async def ws_session(ws: WebSocket) -> None:
             async with state.semaphore:
                 await run_round(session_id, utterance_id, payload, events,
                                 app.state.asr_client, app.state.tts_client, send,
-                                app.state.actor, state, budget_exceeded=budget_exceeded)
+                                state.actor, state, budget_exceeded=budget_exceeded)
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001 —— 回合失败不杀连接
@@ -101,7 +117,11 @@ async def ws_session(ws: WebSocket) -> None:
             state.round_task = None
 
     async def _handle_companion_ask(entity_id: str) -> None:
-        entry = app.state.entity_words.get(entity_id)
+        entry = None
+        if state.scene:
+            entry = next(((e["semantics"]["wordId"], e["semantics"]["name"])
+                          for e in state.scene.entities
+                          if e["id"] == entity_id and e.get("semantics", {}).get("wordId")), None)
         if entry is None:
             await send({"type": "companion.reply", "turnId": f"comp_{uuid.uuid4().hex[:8]}",
                         "word": "", "scaffold": "", "degraded": True, "error": "unknown_entity"})
@@ -145,6 +165,8 @@ async def ws_session(ws: WebSocket) -> None:
             if msg["type"] == "websocket.disconnect":
                 if state.round_task and not state.round_task.done():
                     state.round_task.cancel()
+                if state.fill_task and not state.fill_task.done():
+                    state.fill_task.cancel()
                 return
             if msg.get("text"):
                 ctrl = json.loads(msg["text"])
@@ -168,6 +190,16 @@ async def ws_session(ws: WebSocket) -> None:
                     await _cancel_and_interrupt()
                 elif t == "companion.ask":
                     await _handle_companion_ask(ctrl.get("entityId"))
+                elif t == "scene.request":
+                    if state.scene is None:
+                        continue
+                    target = app.state.scenes.target_for(state.scene.archetype_id, ctrl.get("exitId"))
+                    if target:
+                        await enter_scene(app, events, state, session_id, send,
+                                          target_archetype_id=target, source="exit")
+                elif t == "scene.hint":
+                    # Task 7 实现预取；本任务仅解析（保证协议字段不抛）
+                    pass
             else:
                 raw = msg.get("bytes")
                 if raw:

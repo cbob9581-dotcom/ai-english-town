@@ -24,6 +24,11 @@ class Settings:
     llm_temperature_tutor: float = 0.3
     llm_max_tokens_npc: int = 320
     llm_max_tokens_tutor: int = 320
+    llm_total_timeout_director_s: float = 6.0
+    llm_temperature_director: float = 0.2
+    llm_max_tokens_director: int = 400
+    scene_prefetch_ttl_s: float = 60.0
+    scene_prefetch_budget_ratio: float = 0.8
     llm_session_call_cap: int = 200
     llm_concurrency_limit: int = 2
     tutor_cache_dir: Path = Path("data/tutor-audio")
@@ -42,6 +47,11 @@ class Settings:
         "llm_temperature_tutor": "LLM_TEMPERATURE_TUTOR",
         "llm_max_tokens_npc": "LLM_MAX_TOKENS_NPC",
         "llm_max_tokens_tutor": "LLM_MAX_TOKENS_TUTOR",
+        "llm_total_timeout_director_s": "LLM_TOTAL_TIMEOUT_DIRECTOR_S",
+        "llm_temperature_director": "LLM_TEMPERATURE_DIRECTOR",
+        "llm_max_tokens_director": "LLM_MAX_TOKENS_DIRECTOR",
+        "scene_prefetch_ttl_s": "SCENE_PREFETCH_TTL_S",
+        "scene_prefetch_budget_ratio": "SCENE_PREFETCH_BUDGET_RATIO",
         "llm_session_call_cap": "LLM_SESSION_CALL_CAP",
         "llm_concurrency_limit": "LLM_CONCURRENCY_LIMIT",
         "tutor_cache_dir": "TUTOR_CACHE_DIR",

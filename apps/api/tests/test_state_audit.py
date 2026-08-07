@@ -37,7 +37,8 @@ async def test_full_round_only_touches_allowed_tables(tmp_path) -> None:
     before = _snapshot(events)
     ws = FakeWS([
         audio_start("u1"), audio_frame(), audio_end("u1"),
-        {"type": "websocket.receive", "text": json.dumps({"type": "companion.ask", "entityId": "loaf-1"})},
+        # 进场默认 plaza 场景；companion.ask 指向 plaza 内可问实体（Task 4 改为读 state.scene）
+        {"type": "websocket.receive", "text": json.dumps({"type": "companion.ask", "entityId": "fountain.center-1"})},
     ], app)
     task = asyncio.create_task(ws_session(ws))
     await asyncio.sleep(0.6)

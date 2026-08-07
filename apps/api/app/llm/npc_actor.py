@@ -52,12 +52,15 @@ def build_history(events, session_id: str, limit: int = 10, max_chars: int = 120
 
 class NpcActor:
     def __init__(self, client: LLMAdapter, settings: Settings, llm_log,
-                 allowed_words: dict[str, str], fallback: Callable[[str], str]) -> None:
+                 allowed_words: dict[str, str], fallback: Callable[[str], str],
+                 *, persona: str | None = None, entity_by_word_id: dict | None = None) -> None:
         self._client = client
         self._settings = settings
         self._llm_log = llm_log
         self._allowed_words = dict(allowed_words)
         self._fallback = fallback
+        self._persona = persona or SYSTEM_PROMPT
+        self._entity_by_word_id = entity_by_word_id or {}
 
     def _scene_hint(self) -> str:
         return "Items nearby: " + ", ".join(self._allowed_words.values())
@@ -69,7 +72,7 @@ class NpcActor:
             "scene": self._scene_hint(),
         }
         return [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": self._persona},
             {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
         ]
 

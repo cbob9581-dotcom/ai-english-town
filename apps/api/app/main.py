@@ -14,7 +14,6 @@ from app.scripted_npc import reply as scripted_reply
 from app.settings import Settings
 from app.workers import asr_client as worker_asr, tts_client as worker_tts
 
-SCENE_ID = "scene_bakery_001"
 ASR_URL = "http://127.0.0.1:8001"
 TTS_BASE = "http://127.0.0.1:8002"
 
@@ -24,22 +23,27 @@ def create_app(events: EventStore | None = None, settings: Settings | None = Non
     settings = settings or Settings.from_env()
     events = events or EventStore(settings.db_path)
     scenes = SceneStore(settings.asset_root)
-    scene = scenes.get_compiled_scene(SCENE_ID)
-    scene_words = {
-        e["semantics"]["wordId"]: e["semantics"]["name"]
-        for e in scene["entities"] if e.get("semantics", {}).get("wordId")
-    }
-    entity_words = {
-        e["id"]: (e["semantics"]["wordId"], e["semantics"]["name"])
-        for e in scene["entities"] if e.get("semantics", {}).get("wordId")
-    }
+    catalog = scenes.catalog
     llm_log = LlmLog(events.connection)
     cache = TutorCache(events.connection, settings.tutor_cache_dir)
     client = llm_client or get_client(settings)
     asr_impl = asr_client or (lambda audio: worker_asr(audio, f"{ASR_URL}/transcribe"))
     tts_impl = tts_client or (lambda text: worker_tts(text, TTS_BASE))
-    actor = NpcActor(client, settings, llm_log, scene_words,
-                     lambda u: scripted_reply(u)["speech"])
+
+    def scene_factory(scene_words: dict, entity_by_word_id: dict, npc_id: str | None = None) -> NpcActor:
+        persona = (
+            "You are a friendly helper in a small English town. Reply in short, simple English "
+            "suitable for an A1-A2 learner. Never mention that you are an AI. Use only plain "
+            "English text: no newlines, no URLs, no code."
+        )
+        if npc_id:
+            npc = catalog.npc(npc_id)
+            if npc:
+                persona = npc.persona
+        return NpcActor(client, settings, llm_log, scene_words,
+                        lambda u: scripted_reply(u)["speech"], persona=persona)
+
+    actor = scene_factory({}, {})
     tutor = CompanionTutor(client, settings, llm_log, cache, tts_impl)
 
     @asynccontextmanager
@@ -51,8 +55,8 @@ def create_app(events: EventStore | None = None, settings: Settings | None = Non
     app.state.events = events
     app.state.settings = settings
     app.state.scenes = scenes
-    app.state.scene_words = scene_words
-    app.state.entity_words = entity_words
+    app.state.catalog = catalog
+    app.state.scene_factory = scene_factory
     app.state.llm_log = llm_log
     app.state.tutor_cache = cache
     app.state.actor = actor
