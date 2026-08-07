@@ -40,3 +40,12 @@ def test_fill_placed_inside_its_slot_zone() -> None:
 def test_compiled_scene_includes_npc_entity() -> None:
     compiled = compile_from_docs(ARCHETYPE, template_scene_plan())
     assert any(e["component"] == "npc" for e in compiled["entities"])
+
+
+def test_no_two_entities_share_layout_coordinate() -> None:
+    compiled = compile_from_docs(ARCHETYPE, template_scene_plan())
+    seen: set[tuple[int, int]] = set()
+    for e in compiled["entities"]:
+        coord = (e["layout"]["x"], e["layout"]["y"])
+        assert coord not in seen, f"entities overlap at {coord}"
+        seen.add(coord)
