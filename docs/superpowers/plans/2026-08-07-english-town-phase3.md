@@ -675,11 +675,25 @@ def test_town_map_edges_all_resolve_and_return() -> None:
 
 
 def test_hub_is_start_and_every_spoke_returns() -> None:
+    """每个地点都能（直接或经中转）回到 hub；town-map 无单向死胡同。
+    library 是 station 的叶子（唯一出口 left→station），回 hub 需经 station 中转。"""
     tm = _store().load_town_map()
     hub = tm["start"]
-    spokes = [k for k in tm["edges"] if k != hub]
-    for spoke in spokes:
-        assert hub in tm["edges"][spoke].values(), f"{spoke} 无法回到 hub {hub}"
+    for src, edges in tm["edges"].items():
+        if src == hub:
+            continue
+        seen = {src}
+        stack = list(edges.values())
+        while stack:
+            node = stack.pop()
+            if node == hub:
+                break
+            if node in seen:
+                continue
+            seen.add(node)
+            stack.extend(tm["edges"].get(node, {}).values())
+        else:
+            raise AssertionError(f"{src} 无法回到 hub {hub}")
 ```
 
 - [ ] **Step 3: 运行确认失败**
