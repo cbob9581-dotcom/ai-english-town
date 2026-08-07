@@ -50,3 +50,11 @@ uv run python tests/latency/measure.py
 ## 版本锁定
 
 自检/延迟的实测值、GPU/CUDA/模型 wheel 兼容性等记录在 [`VERSION_LOCK.md`](./VERSION_LOCK.md)。**真实模型（kokoro / faster-whisper）下载完成后**才可回填模型加载、转写/合成耗时、峰值显存与延迟 P50/P95 —— 本机网络对模型下载不稳定的情况见该文档标注。
+
+### 阶段 2：LLM（DeepSeek / OpenAI 兼容）
+
+- 环境变量：`DEEPSEEK_API_KEY`（必填才走真模型；不填自动落 mock）、`LLM_BASE_URL`（默认 https://api.deepseek.com）、`LLM_MODEL`（默认 deepseek-chat；拒绝 deepseek-reasoner）
+- 离线测试：`MOCK_LLM_SCENARIO=ok|timeout|connect_error|invalid_json|bad_word_id|missing_word|too_long|truncated|empty`（默认 ok）
+- 测量：`uv run --project apps/api python scripts/llm-smoke.py`（真 key，20 次 → tests/fixtures/llm-golden/）
+- 启动自检：`python scripts/startup-selfcheck.py`（含 LLM 探活）
+- 成本护栏默认值：单 session 200 次 LLM 调用 / 并发 2 / tutor 同词 in-flight 合并

@@ -1,7 +1,7 @@
 # 英语小镇 · 阶段 2 设计文档：LLM NPC 闭环（流式 NPC Actor + Companion Tutor）
 
 日期：2026-08-06（草稿）→ 2026-08-06（v2 修订，吸收技术评审：流式替代单次 JSON、AEC/ducking/barge-in、append-only 打断、评审 12 项 + 建议项）
-状态：v2 待用户复核
+状态：v2 已实现（阶段 2 完成）
 
 > 本阶段是 spec `docs/superpowers/specs/2026-08-05-english-town-design.md` v2 的**里程碑 2** 落地：
 > "接 DeepSeek：NPC Actor + Companion Tutor；双通道协议；提案边界；超时/打断/历史裁剪。验收＝对话稳定、可打断、无状态越权。"
