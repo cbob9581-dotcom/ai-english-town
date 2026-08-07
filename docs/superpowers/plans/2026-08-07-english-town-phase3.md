@@ -79,16 +79,23 @@
 
 ```python
 # apps/api/tests/test_llm_client.py 追加
-def test_openai_client_aclose_called(tmp_path) -> None:
-    """aclose 必须存在且可调用（连接池释放钩子）。"""
-    from app.llm.client import LLMAdapter
-    import inspect
-    assert "aclose" in LLMAdapter.__protocol_attrs__ if hasattr(LLMAdapter, "__protocol_attrs__") else True
-    # 真实验证：MockAdapter 实现 aclose，OpenAIClient 实现 aclose
+def test_mock_adapter_aclose_exists_and_noop() -> None:
+    """MockAdapter 必须实现 aclose（连接池释放钩子），调用不抛且幂等。红相：MockAdapter 无 aclose → FAIL。"""
     from app.llm.mock import MockAdapter
     import asyncio
+
+    assert hasattr(MockAdapter, "aclose")
     m = MockAdapter("ok")
-    asyncio.run(m.aclose())
+    asyncio.run(m.aclose())   # 不抛
+    asyncio.run(m.aclose())   # 幂等
+
+
+def test_openai_client_declares_aclose() -> None:
+    """OpenAIClient 必须声明 async aclose（lifespan shutdown 调用）。红相：未实现 → AttributeError → FAIL。"""
+    from app.llm.client import OpenAIClient
+    import inspect
+
+    assert inspect.iscoroutinefunction(OpenAIClient.aclose)
 ```
 
 - [ ] **Step 2: 运行确认失败**
@@ -2538,9 +2545,6 @@ Expected: 完成；`node_modules` 出现。
 
 - [ ] **Step 2: 写失败测试（两个门 + patch 应用）**
 
-```python
-# 注：这是 TS，以下为 .ts 测试
-```
 `apps/web/tests/turnGate.test.ts` 追加：
 ```ts
 import { acceptSceneMessage, acceptTurnMessage, isAcceptedTurn } from '../src/audio/turnGate';
@@ -3295,6 +3299,7 @@ interface Props {
 const DECOR_POS: Record<string, { x: number; y: number }> = {
   fountain: { x: 60, y: 60 }, tree: { x: 850, y: 90 }, bench: { x: 820, y: 720 },
   window: { x: 60, y: 90 }, shelf: { x: 160, y: 500 }, 'hanging-sign': { x: 500, y: 80 },
+  sign: { x: 500, y: 80 },   // station/cafe background 用 "sign"（与 hanging-sign 同位置）
 };
 
 export function SceneViewport({ scene, status, onExitClick, onHint, onNpcClick, onEntityClick, lastGesture }: Props) {
@@ -3535,8 +3540,10 @@ git commit -m "feat(web): archetype-driven viewport + exits + hover hint + gestu
 "stationery.dictionary": { "emoji": "📖", "label": "dictionary" },
 "container.jar":     { "emoji": "🫙", "label": "jar" },
 "deco.flower":       { "emoji": "🌸", "label": "flower" },
-"nature.duck":       { "emoji": "🦆", "label": "duck" }
+"nature.duck":       { "emoji": "🦆", "label": "duck" },
+"decor.sign":        { "emoji": "🪧", "label": "sign" }
 ```
+> 注意：`concept.deco.sign`（visualKey `decor.sign`）的图标必须在此补齐，否则 Task 2 的 `test_every_catalog_visual_key_exists_in_icon_map` 在 Task 13 会红。
 
 - [ ] **Step 4: 运行资产测试确认全覆盖**
 
