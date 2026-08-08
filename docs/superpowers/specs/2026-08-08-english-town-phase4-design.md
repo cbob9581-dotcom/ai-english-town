@@ -59,7 +59,7 @@ CREATE TABLE learning_items(
   word_id      TEXT PRIMARY KEY,        -- word_<lemma>_<pos>_<sense>
   user_id      TEXT NOT NULL DEFAULT 'local',
   lemma        TEXT NOT NULL,
-  pos          TEXT,                    -- noun/verb/adj/...
+  pos          TEXT,                    -- 短格式 n/v/adj/...（与 catalog/concepts 一致，勿用 noun/verb）
   sense        TEXT,
   ipa          TEXT,
   cefr         TEXT,                    -- A1..B1（词典命中才有）
@@ -189,10 +189,10 @@ ALTER TABLE session_events ADD COLUMN internal INTEGER NOT NULL DEFAULT 0;
 {
   "version": 1,
   "words": [
-    { "lemma": "loaf", "pos": "noun", "senses": ["一条面包"],
+    { "lemma": "loaf", "pos": "n", "senses": ["一条面包"],
       "ipa": "/loʊf/", "cefr": "A2", "sceneTags": ["bakery"],
       "carrier": "object", "slotCategories": ["food"] },
-    { "lemma": "order", "pos": "verb", "senses": ["点（餐）", "订购"],
+    { "lemma": "order", "pos": "v", "senses": ["点（餐）", "订购"],
       "ipa": "/ˈɔːrdər/", "cefr": "A2", "sceneTags": ["bakery", "cafe"],
       "carrier": "phrase", "slotCategories": [] }
   ]
@@ -213,7 +213,7 @@ ALTER TABLE session_events ADD COLUMN internal INTEGER NOT NULL DEFAULT 0;
 
 **输入约束（评审建议）**：
 - `words` 长度 ≤ 500；单个词 ≤ 64 字符；仅允许 `[a-zA-Z]`、连字符 `-`、撇号 `'`、空格（其余整请求 422 `{ "detail": str }`）。
-- `pos` 来源规则：条目支持 `"loaf/noun"` 语法（显式 pos）；未指定时取词典中该 lemma 的第一个词条，**多义词全部导入**（每个 sense 一条 learning_item）。
+- `pos` 来源规则：条目支持 `"loaf/n"` 语法（显式短格式 pos，与 catalog/concepts 一致）；未指定时取词典中该 lemma 的第一个词条，**多义词全部导入**（每个 sense 一条 learning_item）。
 
 管线：
 
