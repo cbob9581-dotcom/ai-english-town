@@ -2531,7 +2531,10 @@ async def test_hint_prefetches_and_later_enter_uses_cache_without_new_director_c
     calls_before = {"n": 0}
     class CountingDirector(MockSceneDirector):
         async def propose(self, **kw):
-            calls_before["n"] += 1
+            # 只计 bakery（本场景）：connect 进场 plaza 的 fill 也走 director，
+            # 会把它计入（n=2），断言 n==1 就 FAIL。
+            if kw.get("archetype_id") == "bakery":
+                calls_before["n"] += 1
             return await super().propose(**kw)
 
     events, app = make_app(tmp_path, scenario="ok", scene_director=CountingDirector("ok"))
