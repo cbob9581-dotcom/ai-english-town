@@ -48,6 +48,7 @@ version = "0.1.0"
 source = { virtual = "apps/api" }
 dependencies = [
     { name = "fastapi" },
+    { name = "fsrs" },
     { name = "httpx" },
     { name = "openai" },
     { name = "pytest" },
@@ -60,6 +61,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115,<1" },
+    { name = "fsrs", specifier = ">=5,<6" },
     { name = "httpx", specifier = ">=0.27,<1" },
     { name = "openai", specifier = ">=1.0,<2" },
     { name = "pytest", specifier = ">=8,<9" },
@@ -292,6 +294,15 @@ version = "25.12.19"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e8/2d/d2a548598be01649e2d46231d151a6c56d10b964d94043a335ae56ea2d92/flatbuffers-25.12.19-py2.py3-none-any.whl", hash = "sha256:7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4", size = 26661, upload-time = "2025-12-19T23:16:13.622Z" },
+]
+
+[[package]]
+name = "fsrs"
+version = "5.1.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ae/9f/3dd4e95a381f1ff57ff7977cb43001c5f0a162a5082453639b0d0324101e/fsrs-5.1.3.tar.gz", hash = "sha256:cfbf178ace3adee7d45b4a755bef17df9c0161b8aea249e86506492123d5dbb7", size = 24553, upload-time = "2025-03-29T17:16:26.449Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2b/14/a82ec7f5129568248429e3e81c8cba93d2e535408068913c6611b8e4da30/fsrs-5.1.3-py3-none-any.whl", hash = "sha256:242616570261d79318b3a9af22de93e97806b9813cc7194c2a0d844959d36726", size = 17486, upload-time = "2025-03-29T17:16:25.407Z" },
 ]
 
 [[package]]
