@@ -14,7 +14,7 @@ from tests.ws_helpers import FakeWS, audio_end, audio_frame, audio_start, make_a
 ALLOWED_TABLES = {"session_events", "llm_calls", "tutor_cache",
                   "word_lists", "learning_items", "mastery_states",
                   "evidence_events", "spontaneous_encounters", "spontaneous_words",
-                  "evidence_outbox"}
+                  "evidence_outbox", "memory_state"}
 
 
 def _snapshot(events: EventStore) -> dict[str, tuple[int, str]]:

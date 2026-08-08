@@ -40,6 +40,13 @@ class Settings:
     fsrs_retention: float = 0.9
     fsrs_min_confidence: float = 0.6
 
+    # --- 阶段 5：WorldMemory + 词级对齐评分 ---
+    memory_policy_version: str = "v1"
+    pronunciation_policy_version: str = "v1"
+    enable_word_timestamps: bool = False          # 默认关；开则 asr-worker 输出 words
+    word_timestamp_min_model: str = "whisper-large-v3"
+    pronunciation_audio_consent: bool = False     # 默认关；开才落盘 WAV
+
     _ENV_FIELDS = {
         "llm_base_url": "LLM_BASE_URL",
         "llm_api_key": "DEEPSEEK_API_KEY",
@@ -67,6 +74,11 @@ class Settings:
         "score_alpha": "SCORE_ALPHA",
         "fsrs_retention": "FSRS_RETENTION",
         "fsrs_min_confidence": "FSRS_MIN_CONFIDENCE",
+        "memory_policy_version": "MEMORY_POLICY_VERSION",
+        "pronunciation_policy_version": "PRONUNCIATION_POLICY_VERSION",
+        "enable_word_timestamps": "ENABLE_WORD_TIMESTAMPS",
+        "word_timestamp_min_model": "WORD_TIMESTAMP_MIN_MODEL",
+        "pronunciation_audio_consent": "PRONUNCIATION_AUDIO_CONSENT",
     }
 
     @classmethod

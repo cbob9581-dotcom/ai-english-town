@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS mastery_states(
   productive_score    REAL NOT NULL DEFAULT 0.0,
   receptive_score     REAL NOT NULL DEFAULT 0.0,
   asr_confidence_score REAL NOT NULL DEFAULT 0.0,
+  asr_word_confidence_score REAL NOT NULL DEFAULT 0.0,
   state               TEXT NOT NULL DEFAULT 'new',
   due                 TEXT,
   stability           REAL NOT NULL DEFAULT 0.0,
@@ -104,6 +105,13 @@ CREATE TABLE IF NOT EXISTS evidence_outbox(
   payload_json TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS memory_state(
+  user_id            TEXT NOT NULL DEFAULT 'local',
+  world_summary_json TEXT NOT NULL,
+  revision           INTEGER NOT NULL DEFAULT 0,
+  updated_at         TEXT NOT NULL,
+  PRIMARY KEY(user_id)
+);
 """
 
 
@@ -115,6 +123,15 @@ class LearningStore:
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys=ON")
         self.conn.executescript(SCHEMA)
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """旧库幂等迁移：mastery_states 缺 asr_word_confidence_score 列则 ALTER 加列。"""
+        cols = {r[1] for r in self.conn.execute("PRAGMA table_info(mastery_states)")}
+        if "asr_word_confidence_score" not in cols:
+            self.conn.execute(
+                "ALTER TABLE mastery_states ADD COLUMN asr_word_confidence_score REAL NOT NULL DEFAULT 0.0")
+        self.conn.commit()
 
     def import_words(self, user_id: str, list_id: str, name: str, items: list[dict]) -> tuple[int, int, int, int]:
         """独立事务（自行 commit）。word_id 缺省从 lemma_pos_sense 派生。"""
