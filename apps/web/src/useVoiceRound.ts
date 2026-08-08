@@ -4,7 +4,8 @@ import { RmsGate } from './audio/rms-gate';
 import { VoiceSocket } from './audio/ws-client';
 import { AudioQueue } from './audio/playback-queue';
 import { createWavPlayer, type PlaybackHandle, type WavPlayer } from './audio/playback';
-import { isAcceptedTurn } from './audio/turnGate';
+import { acceptTurnMessage, acceptSceneMessage } from './audio/turnGate';
+import { useSceneStore } from './sceneStore';
 import type { Turn } from './DialogueDock';
 
 interface CompanionState { word: string; scaffold: string; }
@@ -26,6 +27,8 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
   const companionTurnIdRef = useRef<string | null>(null);
   const audioTurnIdRef = useRef<string | null>(null);
   const lastTurnIdRef = useRef<string | null>(null);
+  const currentGenIdRef = useRef<string | null>(null);
+  const hintTimerRef = useRef<number | null>(null);
 
   const ensurePlayer = () => {
     if (!playerRef.current) playerRef.current = createWavPlayer();
@@ -83,8 +86,30 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
     await sock.connect(wsUrl);
     socketRef.current = sock;
 
+    sock.on('scene.skeleton', (m: any) => {
+      currentGenIdRef.current = m.generationId;
+      currentTurnIdRef.current = null;      // 新场景：对话门 reset
+      lastTurnIdRef.current = null;
+      companionTurnIdRef.current = null;
+      audioTurnIdRef.current = null;
+      queueRef.current.clear();
+      useSceneStore.getState().applySkeleton(m);
+    });
+    sock.on('scene.patch', (m: any) => {
+      const s = useSceneStore.getState();
+      if (!acceptSceneMessage(currentGenIdRef.current, s.sceneId, s.revision, m.generationId, m.sceneId, m.baseRevision)) return;
+      useSceneStore.getState().applyPatch(m);
+    });
+    sock.on('scene.degraded', (m: any) => {
+      if (currentGenIdRef.current !== m.generationId) return;
+      useSceneStore.getState().applyDegraded(m);
+    });
+    sock.on('scene.focus', (m: any) => {
+      if (currentGenIdRef.current !== m.generationId) return;
+      useSceneStore.getState().applyFocus(m);
+    });
     sock.on('npc.speech.delta', (m: any) => {
-      if (!isAcceptedTurn(currentTurnIdRef.current, companionTurnIdRef.current, m.turnId)) return;
+      if (!acceptTurnMessage(currentGenIdRef.current, currentTurnIdRef.current, companionTurnIdRef.current, m.generationId, m.turnId)) return;
       if (currentTurnIdRef.current === null) {
         // null 窗口（新一轮刚开始）：丢弃上一轮尾部迟到的消息，仅真正的新 turnId 可 bootstrap
         if (m.turnId === lastTurnIdRef.current) return;
@@ -93,7 +118,7 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
       appendDelta(m.turnId, (m.text ?? '').trim());
     });
     sock.on('npc.speech.commit', (m: any) => {
-      if (!isAcceptedTurn(currentTurnIdRef.current, companionTurnIdRef.current, m.turnId)) return;
+      if (!acceptTurnMessage(currentGenIdRef.current, currentTurnIdRef.current, companionTurnIdRef.current, m.generationId, m.turnId)) return;
       if (currentTurnIdRef.current === null) {
         if (m.turnId === lastTurnIdRef.current) return;
         currentTurnIdRef.current = m.turnId;
@@ -102,7 +127,7 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
       applyCommit(m.turnId, m.text);
     });
     sock.on('npc.turn.metadata', (m: any) => {
-      if (!isAcceptedTurn(currentTurnIdRef.current, companionTurnIdRef.current, m.turnId)) return;
+      if (!acceptTurnMessage(currentGenIdRef.current, currentTurnIdRef.current, companionTurnIdRef.current, m.generationId, m.turnId)) return;
       if (currentTurnIdRef.current === null && m.turnId === lastTurnIdRef.current) return;
       applyMetadata(m.turnId, m.candidateWordIds ?? []);
     });
@@ -112,7 +137,7 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
       setCompanion({ word: m.word, scaffold: m.scaffold });
     });
     sock.on('tts.audio.start', (m: any) => {
-      if (!isAcceptedTurn(currentTurnIdRef.current, companionTurnIdRef.current, m.turnId)) {
+      if (!acceptTurnMessage(currentGenIdRef.current, currentTurnIdRef.current, companionTurnIdRef.current, m.generationId, m.turnId)) {
         queueRef.current.clear();
         audioTurnIdRef.current = null;
         return;
@@ -127,7 +152,7 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
       setStatus('speaking');
     });
     sock.on('tts.audio.end', (m: any) => {
-      if (audioTurnIdRef.current !== m.turnId) return;
+      if (currentGenIdRef.current !== m.generationId || audioTurnIdRef.current !== m.turnId) return;
       audioTurnIdRef.current = null;
       gateRef.current.setDucking(false);
       stopPlayback();
@@ -171,6 +196,10 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
   };
 
   const stop = () => {
+    if (hintTimerRef.current !== null) {
+      window.clearTimeout(hintTimerRef.current);
+      hintTimerRef.current = null;
+    }
     stopPlayback();
     micRef.current?.stop();
     socketRef.current?.close();
@@ -188,5 +217,18 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
     socketRef.current?.sendControl({ type: 'companion.ask', entityId });
   };
 
-  return { micOn, status, turns, companion, start, stop, beginUtterance, interrupt, askCompanion };
+  const requestScene = (exitId: string) => {
+    socketRef.current?.sendControl({ type: 'scene.request', exitId });
+  };
+  const hintScene = (exitId: string) => {
+    if (hintTimerRef.current !== null) window.clearTimeout(hintTimerRef.current);
+    hintTimerRef.current = window.setTimeout(() => {
+      socketRef.current?.sendControl({ type: 'scene.hint', exitId });
+    }, 300);
+  };
+  const focusNpc = (npcId: string) => {
+    socketRef.current?.sendControl({ type: 'npc.focus', sceneId: useSceneStore.getState().sceneId, generationId: useSceneStore.getState().generationId, characterId: npcId });
+  };
+
+  return { micOn, status, turns, companion, start, stop, beginUtterance, interrupt, askCompanion, requestScene, hintScene, focusNpc };
 }

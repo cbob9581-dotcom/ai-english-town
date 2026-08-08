@@ -1,11 +1,16 @@
 import type { CSSProperties } from 'react';
 import { useRef, useState } from 'react';
 import type { Entity } from './types';
+import type { SceneStatus } from './sceneStore';
 import { ensureMinHit, mapLogicalToCss } from './coords';
 import { renderEntity } from './registry';
 
 interface Props {
-  scene: { entities: Entity[]; setting: { displayName: string; time: string } };
+  scene: { entities: Entity[]; setting: { displayName: string; time: string } | null };
+  status?: SceneStatus;
+  onExitClick?: (exitId: string) => void;
+  onHint?: (exitId: string) => void;
+  onNpcClick?: (npcId: string) => void;
   onEntityClick?: (entity: Entity) => void;
 }
 

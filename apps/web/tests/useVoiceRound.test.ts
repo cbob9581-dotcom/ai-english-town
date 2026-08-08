@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useVoiceRound } from '../src/useVoiceRound';
+import { useSceneStore } from '../src/sceneStore';
 
 /** 被 mock 的 playback 记录每次 play() 收到的 buffer，用于断言"播的是哪一段音频"。 */
 const { playedBuffers } = vi.hoisted(() => ({ playedBuffers: [] as ArrayBuffer[] }));
@@ -80,6 +81,15 @@ async function startHook() {
   const emit = (type: string, payload: any) => {
     for (const h of sock.handlers.get(type) ?? []) h(payload);
   };
+  // 门改造前提：先播种 scene.skeleton（genId 'g'），让既有语音 fixture 的 genId 全部命中
+  // currentGenIdRef；否则 currentGenIdRef=null 会拒掉所有语音消息。纯语音用例不读 store，无害。
+  act(() => emit('scene.skeleton', {
+    type: 'scene.skeleton', sceneId: 's', generationId: 'g', archetypeId: 'plaza',
+    revision: 1, status: 'skeleton',
+    setting: { displayName: 'Town', time: 'day' },
+    background: { style: 'gradient', gradient: 'linear-gradient(#000,#111)', decor: [], ambienceKey: 'a' },
+    entities: [], characters: [], exits: [],
+  }));
   return { result, sock, mic, emit };
 }
 
@@ -157,7 +167,7 @@ describe('useVoiceRound protocol', () => {
     const chunkB = new ArrayBuffer(6);
     // round-1 音频入队（chunkA 仍在队列——tts.audio.end 未到，服务器被 barge-in 取消）
     act(() => {
-      emit('tts.audio.start', { type: 'tts.audio.start', turnId: 't1', chunkId: 's1', sampleRate: 16000 });
+      emit('tts.audio.start', { type: 'tts.audio.start', generationId: 'g', turnId: 't1', chunkId: 's1', sampleRate: 16000 });
       emit('audio.binary', chunkA);
     });
     // 用户开口 barge-in：清空队列 + 复位 audioTurnId + 发 audio.start
@@ -165,9 +175,9 @@ describe('useVoiceRound protocol', () => {
     expect(sock.sent.filter((m: any) => m.type === 'audio.start').length).toBe(2); // 回合开始 + barge-in
     // round-2 音频：只能播到 chunkB（chunkA 已被清掉，FIFO 不会再先出队）
     act(() => {
-      emit('tts.audio.start', { type: 'tts.audio.start', turnId: 't2', chunkId: 's1', sampleRate: 16000 });
+      emit('tts.audio.start', { type: 'tts.audio.start', generationId: 'g', turnId: 't2', chunkId: 's1', sampleRate: 16000 });
       emit('audio.binary', chunkB);
-      emit('tts.audio.end', { type: 'tts.audio.end', turnId: 't2', chunkId: 's1' });
+      emit('tts.audio.end', { type: 'tts.audio.end', generationId: 'g', turnId: 't2', chunkId: 's1' });
     });
     expect(playedBuffers).toEqual([chunkB]);
   });
@@ -178,5 +188,54 @@ describe('useVoiceRound protocol', () => {
     expect(sock.sent).toEqual([{ type: 'companion.ask', entityId: 'loaf-1' }]);
     act(() => emit('companion.reply', { type: 'companion.reply', turnId: 'c1', word: 'loaf', scaffold: 'A loaf is bread.', degraded: false }));
     expect(result.current.companion).toEqual({ word: 'loaf', scaffold: 'A loaf is bread.' });
+  });
+});
+
+describe('useVoiceRound scene messages', () => {
+  // zustand 是模块级单例：跨用例 reset，避免上个用例的 store 状态残留污染 gate/发送 payload。
+  beforeEach(() => {
+    useSceneStore.getState().reset();
+  });
+
+  it('scene.skeleton populates store and gates speech by generation', async () => {
+    const { result, emit } = await startHook();
+    act(() => {
+      emit('scene.skeleton', {
+        type: 'scene.skeleton', sceneId: 's1', generationId: 'g1', archetypeId: 'plaza',
+        revision: 1, status: 'skeleton',
+        setting: { displayName: 'Town', time: 'day' },
+        background: { style: 'gradient', gradient: 'linear-gradient(#000,#111)', decor: [], ambienceKey: 'a' },
+        entities: [{ id: 'guide-1', component: 'npc', layout: { x: 0, y: 0, w: 40, h: 40, anchor: 'bottom' }, appearance: { visualKey: 'npc.greeter' }, semantics: { name: 'Tom', npcId: 'npc_tom' } }],
+        characters: [{ slotId: 'guide', npcId: 'npc_tom' }],
+        exits: [{ id: 'left', targetArchetypeId: 'bakery' }],
+      });
+    });
+    expect(useSceneStore.getState().generationId).toBe('g1');
+    expect(useSceneStore.getState().entities.length).toBe(1);
+    // 跨场景（g2）的 delta 被拒
+    act(() => result.current.beginUtterance());
+    act(() => emit('npc.speech.delta', { type: 'npc.speech.delta', generationId: 'g2', turnId: 't1', text: 'junk' }));
+    expect(result.current.turns.length).toBe(0);
+  });
+
+  it('scene.patch applies via gate and flips status to filled', async () => {
+    const { result, emit } = await startHook();
+    act(() => {
+      emit('scene.skeleton', { type: 'scene.skeleton', sceneId: 's1', generationId: 'g1', archetypeId: 'bakery', revision: 1, status: 'skeleton', setting: { displayName: 'X', time: 'day' }, background: { style: 'gradient', gradient: 'g', decor: [], ambienceKey: 'a' }, entities: [], characters: [], exits: [] });
+      emit('scene.patch', { type: 'scene.patch', sceneId: 's1', generationId: 'g1', baseRevision: 1, patchId: 'p1', ops: [{ op: 'replace', path: '/setting', value: { displayName: 'Y', time: 'morning' } }] });
+    });
+    expect(useSceneStore.getState().status).toBe('filled');
+    expect(useSceneStore.getState().setting.displayName).toBe('Y');
+    // baseRevision 不匹配的晚到 patch 被丢
+    act(() => emit('scene.patch', { type: 'scene.patch', sceneId: 's1', generationId: 'g1', baseRevision: 9, patchId: 'p2', ops: [{ op: 'replace', path: '/setting', value: { displayName: 'Z', time: 'night' } }] }));
+    expect(useSceneStore.getState().setting.displayName).toBe('Y');
+  });
+
+  it('scene.request / npc.focus send controls', async () => {
+    const { result, sock } = await startHook();
+    act(() => result.current.requestScene('left'));
+    act(() => result.current.focusNpc('npc_rosa'));
+    expect(sock.sent.some((m: any) => m.type === 'scene.request' && m.exitId === 'left')).toBe(true);
+    expect(sock.sent.some((m: any) => m.type === 'npc.focus' && m.characterId === 'npc_rosa')).toBe(true);
   });
 });
