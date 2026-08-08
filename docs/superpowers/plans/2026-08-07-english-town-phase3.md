@@ -1212,13 +1212,17 @@ async def enter_scene(app, events, state, session_id, send, *,
 
 
 async def _cancel_work(app, events, state, session_id) -> None:
-    """取消旧回合/填充任务；写 interrupted（若回合未 commit）；清 pending companion。"""
+    """取消旧回合/填充任务；清 active_turn_id/is_playing（防虚假 interrupted）；清 pending companion。
+    不写 interrupted（转场不是"打断回合"语义）；未 commit 回合的证据由 run_round 的
+    CancelledError 分支补写 partial turn（voice_round.py:80-87）。"""
     if state.round_task and not state.round_task.done():
         state.round_task.cancel()
         try:
             await state.round_task
         except asyncio.CancelledError:
             pass
+    state.active_turn_id = None
+    state.is_playing = False
     if state.fill_task and not state.fill_task.done():
         state.fill_task.cancel()
         try:
@@ -1527,6 +1531,42 @@ async def test_invalid_exit_id_does_not_transition(tmp_path) -> None:
 
 Run: `cd apps/api && uv run pytest tests/test_scene_gates.py -v`
 Expected: PASS（`target_for` 对未知 exitId 返回 `None`，ws.py 的 `if target:` 分支不转场）。
+
+- [ ] **Step 7c: 转场取消回归测试（无虚假 interrupted）**
+
+> 用户裁决（2026-08-08）：评审发现 `_cancel_work`（plan 逐字）转场取消进行中回合后未清 `state.active_turn_id`/`state.is_playing`，后续 `playback.interrupted` 会写「旧 turnId + 新 generationId」错配的虚假 `dialogue.turn.interrupted`（违反门控矩阵，同 5d9f2ec 修过的 bug 类）。裁决 = 修 `_cancel_work`（Step 3 已同步）+ 补此回归测试。追加到 `apps/api/tests/test_scene_gates.py`：
+
+```python
+async def test_transition_cancels_round_and_no_spurious_interrupted(tmp_path) -> None:
+    # 转场取消进行中回合 → _cancel_work 清 active_turn_id/is_playing；
+    # 之后到达的 playback.interrupted 不得再为已死旧回合写 dialogue.turn.interrupted
+    # （否则会把旧 turnId 配新 generationId，违反门控矩阵 genId∧turnId 配对）。
+    events, app = make_app(tmp_path, scenario="ok", slow_delta_s=0.3)
+    ws = FakeWS([
+        audio_start("u1"), audio_frame(), audio_end("u1"),
+        {"type": "sleep", "seconds": 0.4},   # u1 回合启动并在逐句播放中（active_turn_id 已设）
+        {"type": "websocket.receive", "text": '{"type":"scene.request","exitId":"left"}'},
+        {"type": "sleep", "seconds": 0.2},   # 转场取消 u1、进场 bakery
+        {"type": "websocket.receive", "text": '{"type":"playback.interrupted"}'},
+    ], app)
+    task = asyncio.create_task(ws_session(ws))
+    await asyncio.sleep(1.2)   # 跑完整个脚本
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    cancel_round(app)
+
+    st = app.state.sessions["sess-x"]
+    assert st.scene is not None and st.scene.archetype_id == "bakery"   # 已转场
+    assert st.active_turn_id is None                                    # 转场后旧回合状态已清
+    evs = events.list_after("sess-x", 0)
+    assert all(e["event_type"] != "dialogue.turn.interrupted" for e in evs)
+```
+
+> 需在文件头追加 `from tests.ws_helpers import audio_end, audio_frame, audio_start, cancel_round`（音频原语 + `cancel_round`）。`slow_delta_s` 使 u1 首句 delta 延迟，确保 scene.request 到达时回合仍在跑。
+
+Run: `cd apps/api && uv run pytest tests/test_scene_gates.py -v`
+Expected: PASS（fix 前：该测试会 FAIL——转场后 interrupted 被写出）。
 
 - [ ] **Step 8: 运行全部 API 测试确认回归绿**
 
