@@ -11,6 +11,7 @@ from openai import APIStatusError
 
 from app.llm.chunker import SentenceChunker
 from app.llm.client import LLMAdapter, LLMConnectError
+from app.llm.gesture import derive_gesture, validate_gesture
 from app.llm.lexmatch import derive_candidate_word_ids
 from app.llm.proposals import ProposalError, validate_speech
 from app.settings import Settings
@@ -62,6 +63,15 @@ class NpcActor:
         self._persona = persona or SYSTEM_PROMPT
         self._entity_by_word_id = entity_by_word_id or {}
 
+    def _metadata(self, *, generation_id, turn_id, full) -> dict:
+        gesture = validate_gesture(derive_gesture(full, self._entity_by_word_id),
+                                   set(self._entity_by_word_id.values()))
+        msg = {"type": "npc.turn.metadata", "generationId": generation_id, "turnId": turn_id,
+               "candidateWordIds": derive_candidate_word_ids(full, self._allowed_words)}
+        if gesture is not None:
+            msg["gesture"] = gesture
+        return msg
+
     def _scene_hint(self) -> str:
         return "Items nearby: " + ", ".join(self._allowed_words.values())
 
@@ -94,8 +104,7 @@ class NpcActor:
         text = self._fallback(user_text)
         yield {"type": "npc.speech.delta", "generationId": generation_id, "turnId": turn_id, "text": text}
         yield {"type": "npc.speech.commit", "generationId": generation_id, "turnId": turn_id, "text": text}
-        yield {"type": "npc.turn.metadata", "generationId": generation_id, "turnId": turn_id,
-               "candidateWordIds": derive_candidate_word_ids(text, self._allowed_words)}
+        yield self._metadata(generation_id=generation_id, turn_id=turn_id, full=text)
 
     async def stream_reply(self, *, session_id: str, generation_id: str, turn_id: str,
                            utterance_id: str, user_text: str, recent_turns: list[dict],
@@ -154,8 +163,7 @@ class NpcActor:
                              utterance_id=utterance_id, latency_ms=latency_ms, ttft_ms=ttft_ms,
                              reason="none", ok=True, tokens=tokens)
                 yield {"type": "npc.speech.commit", "generationId": generation_id, "turnId": turn_id, "text": full}
-                yield {"type": "npc.turn.metadata", "generationId": generation_id, "turnId": turn_id,
-                       "candidateWordIds": derive_candidate_word_ids(full, self._allowed_words)}
+                yield self._metadata(generation_id=generation_id, turn_id=turn_id, full=full)
         except TimeoutError:
             reason = "timeout"
             error = "total timeout"

@@ -43,7 +43,8 @@ def create_app(events: EventStore | None = None, settings: Settings | None = Non
             if npc:
                 persona = npc.persona
         return NpcActor(client, settings, llm_log, scene_words,
-                        lambda u: scripted_reply(u)["speech"], persona=persona)
+                        lambda u: scripted_reply(u)["speech"], persona=persona,
+                        entity_by_word_id=entity_by_word_id)
 
     actor = scene_factory({}, {})
     tutor = CompanionTutor(client, settings, llm_log, cache, tts_impl)

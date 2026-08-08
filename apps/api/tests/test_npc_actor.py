@@ -124,3 +124,18 @@ async def test_remainder_over_cap_degrades() -> None:
     delta_texts = [m["text"] for m in msgs if m["type"] == "npc.speech.delta"]
     assert "please help me sir" not in delta_texts       # 超限片段绝不被发出
     assert delta_texts[-1] == fallback("hello")
+
+
+async def test_metadata_carries_point_gesture_when_word_mentioned() -> None:
+    from app.llm.mock import MockAdapter
+    from app.llm.npc_actor import NpcActor
+    from app.settings import Settings
+    from tests.fakes import FakeLlmLog
+    client = MockAdapter("ok", stream_text_override="This loaf is fresh! ")
+    actor = NpcActor(client, Settings(), FakeLlmLog(), {"word_loaf_n_1": "loaf"},
+                     lambda u: u, entity_by_word_id={"word_loaf_n_1": "counter.main-1"})
+    msgs = [m async for m in actor.stream_reply(
+        session_id="s", generation_id="g", turn_id="t", utterance_id="u",
+        user_text="what is that?", recent_turns=[])]
+    meta = next(m for m in msgs if m["type"] == "npc.turn.metadata")
+    assert meta["gesture"] == {"type": "point", "entityId": "counter.main-1"}

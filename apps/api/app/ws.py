@@ -162,6 +162,23 @@ async def ws_session(ws: WebSocket) -> None:
             return  # in-flight 合并：连点同一实体不放大调用
         state.pending_asks[word_id] = asyncio.create_task(_run_tutor())
 
+    async def _handle_npc_focus(ctrl: dict) -> None:
+        scene = state.scene
+        if scene is None:
+            return
+        if ctrl.get("sceneId") != scene.scene_id or ctrl.get("generationId") != scene.generation_id:
+            return  # 过期 focus 丢弃
+        npc_id = ctrl.get("characterId")
+        npcs = {c["npcId"] for c in scene.characters}
+        if npc_id not in npcs:
+            return
+        speaker = state.arbitration.set_focus(npc_id, "user_click")
+        scene_words, entity_by_word_id = scene_maps(scene)
+        state.actor = app.state.scene_factory(scene_words, entity_by_word_id, npc_id=npc_id)
+        await send({"type": "scene.focus", "sceneId": scene.scene_id, "generationId": scene.generation_id,
+                    "activeSpeaker": speaker, "focusSource": "user_click",
+                    "focusExpiresAt": state.arbitration.focus_expires_ms})
+
     async def _prefetch_for(app, state, session_id: str, archetype_id: str) -> None:
         """预算允许时后台预取目标 archetype 的提案并缓存。"""
         settings = app.state.settings
@@ -233,6 +250,8 @@ async def ws_session(ws: WebSocket) -> None:
                     target = app.state.scenes.target_for(state.scene.archetype_id, ctrl.get("exitId"))
                     if target:
                         _maybe_spawn_prefetch(app, state, session_id, target)
+                elif t == "npc.focus":
+                    await _handle_npc_focus(ctrl)
             else:
                 raw = msg.get("bytes")
                 if raw:
