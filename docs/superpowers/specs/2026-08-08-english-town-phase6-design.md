@@ -3,6 +3,8 @@
 > 主 spec：`docs/superpowers/specs/2026-08-05-english-town-design.md`（§11 发音评分边界 v2、§17 里程碑 5）
 > 上游：阶段 5 已交付 `mastery_states` 的 `asr_confidence_score`/`asr_word_confidence_score` 双列、`word_confidence.py` 词级打分器、`_write_consent_audio` 授权音频落盘、`learning_items.ipa` 目标词 IPA、`settings.py` env 解析、asr-worker `word_timestamps_active` 门槛。
 > 范围决策（AskUserQuestion 三问）：①「所有收尾」= GOP + deferred minors + 性能回填三块（云端图像继续不做）；② GOP 走**完整路线**（新增音素模型）；③ 模型边界= **维持完整 GOP，音素模型与 whisper 串行共用 GPU**（用户确认：8G 显存够用、不并发）。用户补充：「大多数情况又不会并发」。
+>
+> ⚠️ **设计评审已出，正文待修订**：用户评审 11 条论断已逐条对真实代码核实，裁决与修订指引见 `2026-08-08-english-town-phase6-review-response.md`（已提交）。本文件 §4.3/§4.5/§7 等正文仍含评审指出的缺陷（IPA 空格切分、GOP 公式含自身、单事务内 HTTP+GPU、DEFAULT 0.0、degraded 枚举矛盾），**待整合修订后再进入 writing-plans**。
 
 ## 1. 目标与验收
 
