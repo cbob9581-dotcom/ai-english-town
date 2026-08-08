@@ -33,6 +33,10 @@ class Settings:
     llm_concurrency_limit: int = 2
     tutor_cache_dir: Path = Path("data/tutor-audio")
 
+    # --- 阶段 4：学习证据版本（learning 引擎写入 evidence 时落库的版本号）---
+    evidence_policy_version: str = "v1"
+    fsrs_algorithm_version: str = "fsrs-5"
+
     _ENV_FIELDS = {
         "llm_base_url": "LLM_BASE_URL",
         "llm_api_key": "DEEPSEEK_API_KEY",

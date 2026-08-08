@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 from app.llm.client import APIStatusError, JsonParseError, LLMConnectError
 from app.llm.proposals import ProposalError, validate_proposal
@@ -63,7 +64,18 @@ async def enter_scene(app, events, state, session_id, send, *,
     state.scene = scene
     state.arbitration.reset(default_npc)
     scene_words, entity_by_word_id = scene_maps(scene)
-    state.actor = app.state.scene_factory(scene_words, entity_by_word_id, npc_id=default_npc)
+    state.target_word_ids = set()
+    state.scene_words = scene_words
+    learning = getattr(app.state, "learning", None)
+    if learning:
+        try:
+            chosen = learning.pick_scene_words(target, scenes.get_archetype(target),
+                                               datetime.now(timezone.utc))
+            state.target_word_ids = set(chosen)
+            state.scene_words = {**scene_words, **chosen}   # 选词补充无场景实体的词
+        except Exception:  # noqa: BLE001 —— 选词失败退化为无目标词（不杀进场）
+            pass
+    state.actor = app.state.scene_factory(state.scene_words, entity_by_word_id, npc_id=default_npc)
 
     events.append(session_id, "scene.entered", {
         "sceneId": scene_id, "archetypeId": target, "generationId": generation_id,

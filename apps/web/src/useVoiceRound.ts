@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Mic } from './audio/mic';
 import { RmsGate } from './audio/rms-gate';
 import { VoiceSocket } from './audio/ws-client';
@@ -230,6 +230,10 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
     socketRef.current?.sendControl({ type: 'companion.ask', entityId });
   };
 
+  const entityClick = useCallback((entityId: string) => {
+    socketRef.current?.sendControl({ type: 'entity.click', entityId });
+  }, []);
+
   const requestScene = (exitId: string) => {
     socketRef.current?.sendControl({ type: 'scene.request', exitId });
   };
@@ -243,5 +247,5 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
     socketRef.current?.sendControl({ type: 'npc.focus', sceneId: useSceneStore.getState().sceneId, generationId: useSceneStore.getState().generationId, characterId: npcId });
   };
 
-  return { micOn, status, turns, companion, lastGesture, discovered, toggleDiscover, start, stop, beginUtterance, interrupt, askCompanion, requestScene, hintScene, focusNpc };
+  return { micOn, status, turns, companion, lastGesture, discovered, toggleDiscover, start, stop, beginUtterance, interrupt, askCompanion, entityClick, requestScene, hintScene, focusNpc };
 }

@@ -6,10 +6,12 @@ import asyncio
 import base64
 import json
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, WebSocket
 
 from app.arbitration import ArbitrationState
+from app.learning.encounters import record_ask
 from app.scene_lifecycle import enter_scene, fill_scene, rebuild_from_events, scene_maps
 from app.settings import Settings
 from app.voice_round import run_round
@@ -31,6 +33,8 @@ class SessionState:
         self.played_ms = 0
         self.utterance_id: str | None = None
         self.frames: list[bytes] = []
+        self.target_word_ids: set[str] = set()
+        self.scene_words: dict[str, str] = {}   # 选词合并后的 wordId→name
         self.audio_start_armed = False
         self.barge_in_armed = False
         self.pending_asks: dict[str, asyncio.Task] = {}
@@ -103,9 +107,19 @@ async def ws_session(ws: WebSocket) -> None:
         budget_exceeded = app.state.llm_log.count_session_calls(session_id) >= settings.llm_session_call_cap
         try:
             async with state.semaphore:
-                await run_round(session_id, utterance_id, payload, events,
-                                app.state.asr_client, app.state.tts_client, send,
-                                state.actor, state, budget_exceeded=budget_exceeded)
+                result = await run_round(session_id, utterance_id, payload, events,
+                                         app.state.asr_client, app.state.tts_client, send,
+                                         state.actor, state, budget_exceeded=budget_exceeded)
+                learning = getattr(app.state, "learning", None)
+                if learning and result.get("replied") and state.scene is not None:
+                    try:
+                        learning.record_round(
+                            session_id, state.scene_words,
+                            result.get("npcText", ""), result.get("finalText", ""),
+                            result.get("confidence", -0.5), turn_id=result["turnId"],
+                            target_word_ids=state.target_word_ids)
+                    except Exception:  # noqa: BLE001 —— 学习证据失败不杀回合
+                        pass
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001 —— 回合失败不杀连接
@@ -133,6 +147,29 @@ async def ws_session(ws: WebSocket) -> None:
                         "generationId": gen_id})
             return
         word_id, word = entry
+        learning = getattr(app.state, "learning", None)
+        if learning:
+            now = datetime.now(timezone.utc)
+            try:
+                parts = word_id.split("_")          # word_{lemma}_{pos}_{sense}
+                lemma, pos = parts[1], parts[2]
+                if word_id in state.target_word_ids:
+                    learning.record_evidence(
+                        session_id,
+                        {"evidence_id": f"ev_{uuid.uuid4().hex[:12]}", "event_seq": 0,
+                         "session_id": session_id, "attempt_id": f"help_{word_id}",
+                         "turn_id": f"comp_{uuid.uuid4().hex[:8]}", "objective_id": None,
+                         "word_id": word_id, "source": "help", "prompt_level": 0,
+                         "axis": "productive", "result": "neutral", "confidence": 1.0,
+                         "evidence_policy_version": app.state.settings.evidence_policy_version,
+                         "fsrs_algorithm_version": app.state.settings.fsrs_algorithm_version,
+                         "created_at": now.isoformat()},
+                        event_id=f"ev_help_{word_id}_{now.date().isoformat()}")
+                else:
+                    record_ask(learning.store, "local", session_id, lemma, pos,
+                               f"comp_{uuid.uuid4().hex[:8]}", now=now)
+            except Exception:  # noqa: BLE001 —— 求助证据失败不影响 tutor
+                pass
 
         async def _run_tutor() -> None:
             try:
@@ -178,10 +215,38 @@ async def ws_session(ws: WebSocket) -> None:
             return
         speaker = state.arbitration.set_focus(npc_id, "user_click")
         scene_words, entity_by_word_id = scene_maps(scene)
-        state.actor = app.state.scene_factory(scene_words, entity_by_word_id, npc_id=npc_id)
+        state.actor = app.state.scene_factory(state.scene_words, entity_by_word_id, npc_id=npc_id)
         await send({"type": "scene.focus", "sceneId": scene.scene_id, "generationId": scene.generation_id,
                     "activeSpeaker": speaker, "focusSource": "user_click",
                     "focusExpiresAt": state.arbitration.focus_expires_ms})
+
+    async def _handle_entity_click(entity_id: str) -> None:
+        if state.scene is None:
+            return
+        entry = next(((e["semantics"]["wordId"], e["semantics"]["name"])
+                      for e in state.scene.entities
+                      if e["id"] == entity_id and e.get("semantics", {}).get("wordId")), None)
+        if entry is None:
+            return
+        word_id, _word = entry
+        learning = getattr(app.state, "learning", None)
+        if not learning or word_id not in state.target_word_ids:
+            return
+        now = datetime.now(timezone.utc)
+        try:
+            learning.record_evidence(
+                session_id,
+                {"evidence_id": f"ev_{uuid.uuid4().hex[:12]}", "event_seq": 0,
+                 "session_id": session_id, "attempt_id": f"click_{word_id}",
+                 "turn_id": f"click_{uuid.uuid4().hex[:8]}", "objective_id": None,
+                 "word_id": word_id, "source": "action_understanding", "prompt_level": 1,
+                 "axis": "receptive", "result": "success", "confidence": 1.0,
+                 "evidence_policy_version": app.state.settings.evidence_policy_version,
+                 "fsrs_algorithm_version": app.state.settings.fsrs_algorithm_version,
+                 "created_at": now.isoformat()},
+                event_id=f"ev_click_{word_id}_{now.date().isoformat()}")
+        except Exception:  # noqa: BLE001 —— 点击证据失败不杀连接
+            pass
 
     async def _prefetch_for(app, state, session_id: str, archetype_id: str) -> None:
         """预算允许时后台预取目标 archetype 的提案并缓存。"""
@@ -239,6 +304,8 @@ async def ws_session(ws: WebSocket) -> None:
                     await _cancel_and_interrupt()
                 elif t == "companion.ask":
                     await _handle_companion_ask(ctrl.get("entityId"))
+                elif t == "entity.click":
+                    await _handle_entity_click(ctrl.get("entityId"))
                 elif t == "scene.request":
                     if state.scene is None:
                         continue

@@ -57,7 +57,8 @@ def audio_frame() -> dict:
 
 
 def make_app(tmp_path, scenario: str = "ok", slow_delta_s: float = 0.0,
-             stream_text_override: str | None = None, scene_director=None):
+             stream_text_override: str | None = None, scene_director=None,
+             asr_text: str = "hello"):
     events = EventStore(tmp_path / "e.db")
 
     class SlowActor:
@@ -71,7 +72,7 @@ def make_app(tmp_path, scenario: str = "ok", slow_delta_s: float = 0.0,
                 yield m
 
     async def fake_asr(samples: bytes):
-        return {"finalText": "hello", "segments": [], "language": "en", "confidence": -0.3}
+        return {"finalText": asr_text, "segments": [], "language": "en", "confidence": -0.3}
 
     async def fake_tts(text: str):
         return {"audioBase64": base64.b64encode(b"\x00\x00\x00\x00").decode(), "ms": 30, "sampleRate": 16000}

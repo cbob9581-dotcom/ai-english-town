@@ -33,10 +33,12 @@ async def run_round(
     # per-turn：interrupted 事件的 playedMs 只反映本回合已播放 ms，而非会话累计
     state.played_ms = 0
     asr_result = await asr_client(audio_pcm16)
+    conf = float(asr_result.get("confidence", -0.5))
     final_text = asr_result["finalText"].strip()
     if not final_text:
         state.active_turn_id = None
-        return {"finalText": "", "turnId": turn_id, "replied": False}
+        return {"finalText": "", "turnId": turn_id, "replied": False,
+                "npcText": "", "confidence": conf}
 
     committed = False
     audio_bytes = 0
@@ -76,7 +78,8 @@ async def run_round(
             elif mtype == "npc.turn.metadata":
                 await ws_send(msg)
         state.active_turn_id = None
-        return {"finalText": final_text, "turnId": turn_id, "replied": True}
+        return {"finalText": final_text, "turnId": turn_id, "replied": True,
+                "npcText": accumulated.strip(), "confidence": conf}
     except asyncio.CancelledError:
         # 未 commit 就被打断 → 补写部分轮次（用户输入 + 已产生的 npcText），保持证据不丢
         if not committed:
