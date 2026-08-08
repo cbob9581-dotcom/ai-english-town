@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { SceneViewport } from './SceneViewport';
 import { DialogueDock } from './DialogueDock';
 import { useVoiceRound } from './useVoiceRound';
@@ -12,11 +13,13 @@ export default function App() {
   const [error] = useState<string | null>(null);
   const [focusEntity, setFocusEntity] = useState<Entity | null>(null);
   const { micOn, status, turns, companion, start, stop, beginUtterance, interrupt, askCompanion, requestScene, hintScene, focusNpc } = useVoiceRound('sess-1', `ws://${location.hostname}:8000/ws/sessions/sess-1`);
-  const scene = useSceneStore((s) => ({
+  // 内联对象 selector 必须包 useShallow：zustand v5 + React 19 的 useSyncExternalStore 用
+  // Object.is 比较快照，裸 selector 每次返回新对象 → 恒判变更 → 无限重渲染崩溃（挂载即炸）。
+  const scene = useSceneStore(useShallow((s) => ({
     status: s.status, sceneId: s.sceneId, generationId: s.generationId,
     archetypeId: s.archetypeId, setting: s.setting, background: s.background,
     entities: s.entities, exits: s.exits,
-  }));
+  })));
   const isPreview = window.location.hash === '#/dev/archetypes';
   if (isPreview) return <ArchetypePreview />;
   if (error) return <div>加载失败：{error}</div>;
