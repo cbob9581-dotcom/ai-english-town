@@ -124,6 +124,7 @@ class LearningStore:
         self.conn.execute("PRAGMA foreign_keys=ON")
         self.conn.executescript(SCHEMA)
         self._migrate()
+        self.memory: MemoryStore | None = None
 
     def _migrate(self) -> None:
         """旧库幂等迁移：mastery_states 缺 asr_word_confidence_score 列则 ALTER 加列。"""

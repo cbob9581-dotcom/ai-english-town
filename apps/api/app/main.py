@@ -41,6 +41,7 @@ def create_app(events: EventStore | None = None, settings: Settings | None = Non
     store = LearningStore(events.connection)
     dictionary = Dictionary.load(settings.asset_root)
     engine = LearningEngine(store, events, settings)
+    store.memory = engine.memory
     concepts.configure_word_resolver(store.resolve_word_id_from_store)
 
     def scene_factory(scene_words: dict, entity_by_word_id: dict, npc_id: str | None = None) -> NpcActor:
@@ -75,6 +76,7 @@ def create_app(events: EventStore | None = None, settings: Settings | None = Non
     app.state.events = events
     app.state.settings = settings
     app.state.learning = engine
+    app.state.memory = engine.memory
     app.state.dictionary = dictionary
     app.state.scenes = scenes
     app.state.catalog = catalog

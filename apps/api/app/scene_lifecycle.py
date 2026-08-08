@@ -81,6 +81,15 @@ async def enter_scene(app, events, state, session_id, send, *,
         "sceneId": scene_id, "archetypeId": target, "generationId": generation_id,
         "revision": 1, "source": source,
     })
+    mem = getattr(app.state, "memory", None)
+    if mem is not None:
+        try:
+            with events.write_lock:
+                mem.apply_memory_updates(events.connection, events, "local",
+                                         scene_enter=target, now=datetime.now(timezone.utc))
+                events.connection.commit()
+        except Exception:  # noqa: BLE001 —— 记忆失败不杀进场
+            pass
     await send({
         "type": "scene.skeleton", "sceneId": scene_id, "generationId": generation_id,
         "archetypeId": target, "revision": 1, "status": "skeleton",

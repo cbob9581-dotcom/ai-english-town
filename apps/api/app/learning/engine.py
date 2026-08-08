@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from app.learning import scheduler as sched_mod
 from app.learning.evidence import apply_evidence, classify_round
+from app.learning.memory import MemoryStore
 from app.learning.scores import normalize_asr_confidence
 from app.learning.store import LearningStore
 
@@ -16,6 +17,7 @@ class LearningEngine:
         self.store = store
         self.events = events
         self.settings = settings
+        self.memory = MemoryStore(store.conn)
         # 并发由 events.write_lock 提供（sequence 分配与提交同锁）
 
     # ---- 选词 ----
@@ -49,8 +51,13 @@ class LearningEngine:
                 seq = self.events.append_in_tx(conn, session_id, "evidence",
                                                _internal_payload(evidence),
                                                event_id=event_id, internal=True)
-                apply_evidence(self.store, "local", evidence,
-                               now=datetime.fromisoformat(evidence["created_at"]))
+                _now = datetime.fromisoformat(evidence["created_at"])
+                apply_evidence(self.store, "local", evidence, now=_now)
+                try:
+                    self.memory.apply_memory_updates(conn, self.events, "local",
+                                                     evidence=evidence, now=_now)
+                except Exception:  # noqa: BLE001 —— 记忆抽取失败不杀证据事务、revision 不推进
+                    pass
                 conn.commit()
                 return seq
             except Exception:  # noqa: BLE001 —— 证据失败不杀回合；入 outbox 下次补

@@ -31,12 +31,24 @@ def record_exposure(store: LearningStore, user_id: str, session_id: str,
 
 
 def record_ask(store: LearningStore, user_id: str, session_id: str,
-               lemma: str, pos: str, turn_id: str, *, now: datetime) -> None:
+               lemma: str, pos: str, turn_id: str, *, now: datetime,
+               events=None) -> None:
     record_exposure(store, user_id, session_id, lemma, pos, turn_id, now=now)
     store.conn.execute(
         "UPDATE spontaneous_words SET asked=1 WHERE user_id=? AND lemma=? AND pos=?",
         (user_id, lemma, pos))
     store.conn.commit()
+    mem = getattr(store, "memory", None)
+    if events is not None and mem is not None:
+        try:
+            with events.write_lock:
+                mem.apply_memory_updates(events.connection, events, user_id,
+                                         ask={"lemma": lemma, "pos": pos,
+                                              "session_id": session_id},
+                                         now=now)
+                events.connection.commit()
+        except Exception:  # noqa: BLE001 —— 记忆失败不杀求助
+            pass
 
 
 def promote(store: LearningStore, user_id: str, lemmas: list[str], *, now: datetime) -> int:
