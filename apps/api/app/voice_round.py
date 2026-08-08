@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import uuid
+import wave
+from pathlib import Path
 from typing import Awaitable, Callable
 
 from app.llm.npc_actor import NpcActor, build_history
@@ -13,6 +16,24 @@ from app.llm.npc_actor import NpcActor, build_history
 ASRClient = Callable[[bytes], Awaitable[dict]]
 TTSClient = Callable[[str], Awaitable[dict]]
 WsSend = Callable[[object], Awaitable[None]]
+
+
+def _write_consent_audio(session_id: str, utterance_id: str, pcm: bytes,
+                         settings, meta: dict) -> None:
+    """授权时写 WAV + 元数据；失败仅日志。调用方仅在回合完全成功（replied=True）时调用。"""
+    if not getattr(settings, "pronunciation_audio_consent", False):
+        return
+    try:
+        root = Path(settings.tutor_cache_dir).parent / "pronunciation-audio"
+        dirpath = root / session_id
+        dirpath.mkdir(parents=True, exist_ok=True)
+        with wave.open(str(dirpath / f"{utterance_id}.wav"), "wb") as w:
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000)
+            w.writeframes(pcm)
+        (dirpath / f"{utterance_id}.json").write_text(
+            json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+    except Exception:  # noqa: BLE001 —— 落盘失败不影响回合/评分
+        pass
 
 
 async def run_round(
@@ -79,6 +100,8 @@ async def run_round(
             elif mtype == "npc.turn.metadata":
                 await ws_send(msg)
         state.active_turn_id = None
+        _write_consent_audio(session_id, utterance_id, audio_pcm16, state.settings,
+                             {"turnId": turn_id, "finalText": final_text, "sampleRate": 16000})
         return {"finalText": final_text, "turnId": turn_id, "replied": True,
                 "npcText": accumulated.strip(), "confidence": conf,
                 "words": asr_result.get("words")}

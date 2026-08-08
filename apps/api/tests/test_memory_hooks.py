@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
 from app.event_store import EventStore
+from app.learning.encounters import record_ask
 from app.learning.engine import LearningEngine
-from app.learning.memory import build_world_summary
+from app.learning.memory import MemoryStore, build_world_summary
 from app.learning.store import LearningStore
 from app.settings import Settings
 
@@ -69,3 +70,17 @@ def test_snapshot_events_replay_rebuilds_summary(tmp_path):
     assert rebuilt["wordMastery"] == saved["wordMastery"]
     snaps = [e for e in events.list_after("s1", 0) if e["event_type"] == "world_summary.snapshot"]
     assert len(snaps) == 1
+
+def test_record_ask_with_events_fires_ask_hook(tmp_path):
+    events = EventStore(tmp_path / "e.db")
+    store = LearningStore(events.connection)
+    store.memory = MemoryStore(events.connection)
+    now = datetime(2026, 8, 8, 12, 0, tzinfo=timezone.utc)
+
+    record_ask(store, "local", "s1", "torch", "n", "turn1", now=now, events=events)
+    assert store.memory.get_revision("local") == 1
+    summary = store.memory.get_world_summary("local")
+    assert {"lemma": "torch"} in summary["askedWords"]
+
+    record_ask(store, "local", "s1", "torch", "n", "turn2", now=now, events=events)
+    assert store.memory.get_revision("local") == 1   # 已求助 → 不重复 +

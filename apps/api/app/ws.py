@@ -21,6 +21,7 @@ router = APIRouter()
 
 class SessionState:
     def __init__(self, settings: Settings) -> None:
+        self.settings = settings
         self._fallback_generation = f"gen_{uuid.uuid4().hex[:8]}"
         self.scene = None                    # SceneSession | None（Task 4）
         self.scene_seq = 0
@@ -171,7 +172,7 @@ async def ws_session(ws: WebSocket) -> None:
                         event_id=f"ev_help_{word_id}_{now.date().isoformat()}")
                 else:
                     record_ask(learning.store, "local", session_id, lemma, pos,
-                               f"comp_{uuid.uuid4().hex[:8]}", now=now)
+                               f"comp_{uuid.uuid4().hex[:8]}", now=now, events=learning.events)
             except Exception:  # noqa: BLE001 —— 求助证据失败不影响 tutor
                 pass
 
