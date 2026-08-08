@@ -94,6 +94,30 @@ async def test_director_timeout_degrades_to_skeleton(tmp_path) -> None:
     assert "scene.degraded" in _sent_types(ws)
     # 骨架仍完整可玩
     assert any(e["component"] == "npc" for e in st.scene.entities)
+    # F1：精确降级原因 —— DB 事件与 sent 消息的 reason/fallbackReason 都是 timeout
+    degraded_events = [e["payload"] for e in events.list_after("sess-x", 0)
+                       if e["event_type"] == "scene.degraded"]
+    assert degraded_events and degraded_events[-1]["reason"] == "timeout"
+    assert degraded_events[-1]["fallbackReason"] == "timeout"
+    sent = [m for m in ws.sent if isinstance(m, dict) and m["type"] == "scene.degraded"]
+    assert sent and sent[-1]["reason"] == "timeout" and sent[-1]["fallbackReason"] == "timeout"
+
+
+async def test_director_connect_error_degrades_reason_connect(tmp_path) -> None:
+    events, app = make_app(tmp_path, scenario="ok", scene_director=MockSceneDirector("connect_error"))
+    ws = FakeWS([{"type": "sleep", "seconds": 0.15}], app)
+    task = asyncio.create_task(ws_session(ws))
+    await asyncio.sleep(0.3)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    st = app.state.sessions["sess-x"]
+    assert st.scene is not None and st.scene.status == "degraded"
+    assert "scene.degraded" in _sent_types(ws)
+    degraded_events = [e["payload"] for e in events.list_after("sess-x", 0)
+                       if e["event_type"] == "scene.degraded"]
+    assert degraded_events and degraded_events[-1]["reason"] == "connect"
+    assert degraded_events[-1]["fallbackReason"] == "connect"
 
 
 async def test_scene_transition_cancels_stale_fill(tmp_path) -> None:
