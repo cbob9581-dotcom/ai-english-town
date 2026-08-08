@@ -2632,7 +2632,9 @@ def test_rebuild_from_events_without_entered_returns_false(tmp_path) -> None:
         pass
     app = _App()
     app.state = type("S", (), {})()
-    ok = asyncio.run(rebuild_from_events(app, events, None, "s", None))
+    # rebuild_from_events 是同步 def（Step 3 契约，返回 bool）：asyncio.run 只接受协程，
+    # 直接同步调用；断言意图不变（无 scene.entered → False，且不触碰 app.state）。
+    ok = rebuild_from_events(app, events, None, "s", None)
     assert ok is False
 ```
 
