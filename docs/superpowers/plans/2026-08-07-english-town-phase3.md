@@ -2093,7 +2093,7 @@ Expected: PASS（pytest-asyncio auto 模式）。
 
 ```python
 # apps/api/app/scene_lifecycle.py 追加
-from app.llm.client import JsonParseError, LLMConnectError
+from app.llm.client import APIStatusError, JsonParseError, LLMConnectError
 from app.llm.proposals import ProposalError, validate_proposal
 
 _FALLBACK_REASON_UNKNOWN = "unknown_error"
@@ -2138,11 +2138,20 @@ async def fill_scene(app, events, state, session_id, send, *,
         if ops:
             await send({"type": "scene.patch", "sceneId": scene_id, "generationId": generation_id,
                         "baseRevision": state.scene.revision - 1, "patchId": patch_id, "ops": ops})
-    except (TimeoutError, LLMConnectError, JsonParseError, ProposalError) as e:
-        await _degrade(app, events, state, session_id, send, scene_id, generation_id,
-                       getattr(e, "reason", None) or _FALLBACK_REASON_UNKNOWN)
+    # F1（用户裁决修，2026-08-08）：按异常类型映射精确 reason。原先 getattr(e,"reason",None)
+    # 是死代码——四个异常（TimeoutError/LLMConnectError/JsonParseError/ProposalError）全部无
+    # .reason 属性 → scene.degraded.reason 恒为 unknown_error，前端无法区分降级类型。
+    # 现映射与 FALLBACK_REASONS 词汇（timeout/connect/invalid_json/schema_reject）对齐。
+    except TimeoutError:
+        await _degrade(app, events, state, session_id, send, scene_id, generation_id, "timeout")
+    except (LLMConnectError, APIStatusError):
+        await _degrade(app, events, state, session_id, send, scene_id, generation_id, "connect")
+    except JsonParseError:
+        await _degrade(app, events, state, session_id, send, scene_id, generation_id, "invalid_json")
+    except ProposalError:
+        await _degrade(app, events, state, session_id, send, scene_id, generation_id, "schema_reject")
     except Exception:  # noqa: BLE001 —— 填充失败不杀连接，骨架停留
-        await _degrade(app, events, state, session_id, send, scene_id, generation_id, "unknown_error")
+        await _degrade(app, events, state, session_id, send, scene_id, generation_id, _FALLBACK_REASON_UNKNOWN)
 
 
 async def _degrade(app, events, state, session_id, send, scene_id, generation_id, reason: str) -> None:
