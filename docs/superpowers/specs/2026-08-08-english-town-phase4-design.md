@@ -223,9 +223,9 @@ def fsrs_schedule(item: FsrsItem | None, rating: int,
 
 ## 9. 挂钩点（与既有回合流集成）
 
-- **回合完成**（`apps/api/app/ws.py::_run_round`，`run_round` 返回后）：用最终 ASR 文本 + 本轮上下文生成产出类证据。上下文判定：
-  - 本轮 `scene_words` 含该词且本轮 NPC 教过/提示过 → `prompted_production`（promptLevel 1）
-  - 本轮未教过、用户主动说出 → `spontaneous_production`（promptLevel 0）
+- **回合完成**（`apps/api/app/ws.py::_run_round`，`run_round` 返回后）：用最终 ASR 文本 + 本轮上下文生成产出类证据。上下文判定（**判定可执行规则**）：
+  - 该词 ∈ 本轮 `scene_words` **且**本轮 NPC 台词经服务端 `lexmatch` 命中该词（=本轮教过）→ `prompted_production`（promptLevel 1）
+  - 该词 ∈ `scene_words` 但 NPC 台词未命中、用户主动说出 → `spontaneous_production`（promptLevel 0）
   - 带读/复述模式 → `repetition`（promptLevel 2）
   - 本轮提示过该词但最终 ASR 落空 → `error`（promptLevel 1）
 - **实体点击**（前端 `onEntityClick` → 既有事件流）：点中实体对应的 catalog 概念词 == 目标词 → `action_understanding`。
@@ -249,7 +249,7 @@ def fsrs_schedule(item: FsrsItem | None, rating: int,
 - 自然对话中**连续两轮出现**（lexmatch 命中，非 NPC 教过的目标词）→ 记录。
 - **仅 NPC 台词**出现 → 只记 exposure 计数，**不**创建 learning_item。
 
-达标词（asked=1 或连续两轮）→ 创建 `learning_items(source=free)` + 初始化 `mastery_states`。
+记录是**自动**的；从偶遇提升为目标词（创建 `learning_items(source=free)` + 初始化 `mastery_states`）走 `POST /api/word-lists/spontaneous/import`（**手动**，见 §12）。
 
 ## 12. HTTP 接口（挂到 `main.py`）
 
@@ -259,11 +259,11 @@ POST /api/word-lists/import
   resp  { "imported": int, "known": int, "missingMetadata": int, "total": int }
 
 GET  /api/word-lists/spontaneous
-  resp  { "items": [{ "word": str, "pos": str|null, "turnId": str,
+  resp  { "items": [{ "id": str, "word": str, "pos": str|null, "turnId": str,
                       "encounterNo": int, "asked": bool, "promoted": bool }] }
 
 POST /api/word-lists/spontaneous/import
-  body  { "wordIds": string[] }
+  body  { "encounterIds": string[] }   # spontaneous_encounters.id
   resp  { "promoted": int }
 
 GET  /api/progress/summary
