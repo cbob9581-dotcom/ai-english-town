@@ -226,26 +226,39 @@ ALTER TABLE session_events ADD COLUMN internal INTEGER NOT NULL DEFAULT 0;
 
 ## 7. FSRS 排期（`learning/fsrs.py`，py-fsrs 包装层）
 
-- **依赖**：PyPI 发行名 `fsrs`（py-fsrs，纯 Python，仅运行时依赖 `typing-extensions`）。**锁定实现 FSRS-5 的版本**：主分支已升级 FSRS-6（参数向量 21 项），故上界 `<6`；下界取守卫测试通过的版本（FSRS-5 = **参数向量 w 长度 19**，w[0..18]）。
+- **依赖**：PyPI 发行名 `fsrs`（py-fsrs，纯 Python，仅运行时依赖 `typing-extensions`）。**锁定 `fsrs>=5,<6`**：5.1.3 经核实即 FSRS-5（`Scheduler` docstring「19 model weights」，参数向量 w 长度 19，w[0..18]）；6.x 是 FSRS-6（21 项）故上界 `<6`。
 - **守卫测试**（启动即断言，防止升级踩线）：`len(默认参数向量) == 19`；否则启动失败并提示回退 py-fsrs 版本。
 - 记忆状态 `new / learning / review / relearning`；评分 `1=Again 2=Hard 3=Good 4=Easy`；保留默认 retention 0.9（进 `settings.py`，`fsrs_retention`）。
-- 包装层接口：
+- 包装层接口（**按 py-fsrs 5.1.3 真实 API**，已核源码；5.x 的 `review_card` 直接返回更新后的 Card，**不是** 2.x 的 `SchedulingCards`）：
 
 ```python
 # learning/fsrs.py
 from fsrs import Card, Rating, Scheduler
 from datetime import datetime
 
-def to_fsrs_card(row: Mapping) -> Card: ...        # mastery_states 行 → py-fsrs Card
-def from_fsrs_card(card: Card) -> dict: ...        # Card → mastery_states 列（state/due/stability/.../last_review/reps/lapses）
+def _scheduler() -> Scheduler:
+    # enable_fuzzing=False 保证确定性；learning_steps/relearning_steps 置空 → 首次评分
+    # 直接进 Review（按 interval 排期），与日闸（每天至多一次）一致，不做 1min/10min 学习步。
+    return Scheduler(desired_retention=0.9, enable_fuzzing=False,
+                     learning_steps=(), relearning_steps=())
+
+def to_fsrs_card(row: Mapping) -> Card:
+    """mastery_states 行 → py-fsrs Card。state='new' → 全新 Card()（内部 Learning/step 0）；
+    否则按 state/stability/difficulty/due/last_review 恢复（step 由 state 推导）。
+    card_id 传显式稳定值（如 hash(word_id)）——避免 Card() 默认构造里的 time.sleep(0.001)。"""
+
+def from_fsrs_card(card: Card) -> dict:
+    """Card → mastery_states 列。state 映射：Learning→learning, Review→review,
+    Relearning→relearning（'new' 由引擎维护：尚未 schedule 时）。"""
+
 def schedule(card: Card | None, rating: int, now: datetime) -> Card:
-    """调用 Scheduler().review_card(card or Card(), Rating(rating), now)，
-    取对应评分（again/hard/good/easy）的返回卡片；纯函数、确定性。
-    具体取值访问方式按锁定版本在守卫测试中对齐。"""
+    """updated, _log = _scheduler().review_card(card or to_fsrs_card(new_row), Rating(rating), now)
+    now 必须是 tz-aware UTC（review_card 校验）；返回更新后的 Card。纯函数、确定性。"""
 ```
 
-- `due` / `last_review` 均为 **ISO datetime**；`schedule` 的 `now: datetime` 由调用方注入（WS 会话或测试的时钟）。
-- 单测：固定 `now` + 固定 rating 序列 → 断言 `due/stability/difficulty/reps/lapses` 具体值，并断言与 py-fsrs 锁定版本输出一致。
+- `due` / `last_review` 均为 **ISO datetime**；`schedule` 的 `now: datetime` 由调用方注入（WS 会话或测试的时钟），须 tz-aware UTC。
+- `reps`/`lapses` **不由 py-fsrs Card 维护**（5.x Card 无此字段）：`mastery_states.reps/lapses` 由引擎自记（reps = 已调度次数；lapses = 在 Review 态评 Again 的次数）。
+- 单测：固定 `now` + 固定 rating 序列 → 断言 `due/stability/difficulty` 具体值（`enable_fuzzing=False` 保证可复现），并断言与 py-fsrs 5.1.3 输出一致。
 
 ### 证据源 → FSRS 评分映射（有效评分）
 
@@ -447,7 +460,7 @@ GET  /api/progress/words/{wordId}/evidence            # 评审建议：证据时
 
 ## 16. 依赖与版本
 
-- 后端：新增唯一第三方运行时依赖 **py-fsrs**（PyPI 发行名 `fsrs`，纯 Python）；锁定实现 FSRS-5 的版本（`<6` 上界挡 FSRS-6，下界由 19 参数守卫测试定）；余为标准库 + 既有依赖。
+- 后端：新增唯一第三方运行时依赖 **py-fsrs**（PyPI 发行名 `fsrs`，纯 Python）；**锁定 `fsrs>=5,<6`**（5.1.3 即 FSRS-5/19 参数，6.x 为 FSRS-6）；守卫测试仍断言 `len(默认参数)==19` 防升级踩线；余为标准库 + 既有依赖。
 - 前端：无新依赖（hash 路由 + fetch）。
 - 常量进 `settings.py`：`evidence_policy_version="v1"`、`fsrs_algorithm_version="fsrs-5"`、`score_alpha=0.35`、`fsrs_retention=0.9`、`fsrs_min_confidence=0.6`。
 - 实施顺序（评审）：迁移/DDL 在数据模型冻结后；`evidence.py` 在 fsrs 包装与 resolve_word_id 缓存就绪后；API 与前端最后。
