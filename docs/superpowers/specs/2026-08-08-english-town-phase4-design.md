@@ -302,7 +302,7 @@ def schedule(card: Card | None, rating: int, now: datetime) -> Card:
   - `uncertain`：检出但 `confidence < 0.6` → 同上（不判成败、不计尝试），可选提示用户重说；
   - `error`：**仅** companion 明确纠错路径（见 §9）；
   - `neutral`：无成败判定（help 求助）。
-- 确定性证据（help / error / action_understanding）`confidence = 1.0`；产出类证据 `confidence = ASR 置信度`。
+- **confidence 归一化（关键）**：ASR 的 `confidence` 是 Whisper `avg_logprob`（**负数**，越高越好，如 −0.3），不是 0..1。证据挂钩处必须归一化：`confidence = exp(avg_logprob)`（∈(0,1)，−0.3→0.74），之后才用于阈值判定与 `delta = weight × confidence`。否则负 confidence 会让成功产出算出负 delta（score 反向下降）。确定性证据（help / error / action_understanding）`confidence = 1.0`。
 
 评分权重与轴（§12 表，`evidence_policy_version="v1"`）：
 
