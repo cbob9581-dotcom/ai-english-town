@@ -209,3 +209,64 @@ async def _apply_proposal(app, events, state, session_id, send, *,
         app.state.prefetch.invalidate(archetype_id)
         await fill_scene(app, events, state, session_id, send, scene_id=scene_id,
                          seed=seed, generation_id=generation_id, skeleton=skeleton)
+
+
+def rebuild_from_events(app, events, state, session_id, send) -> bool:
+    """事件投影重建场景。成功 → 组好 state.scene + actor + 发送 skeleton/patch/focus，返回 True。"""
+    evs = events.list_after(session_id, 0)
+    entered = [e["payload"] for e in evs if e["event_type"] == "scene.entered"]
+    if not entered:
+        return False
+    last = entered[-1]
+    patches = [e["payload"] for e in evs if e["event_type"] == "scene.patch"
+               and e["payload"].get("sceneId") == last["sceneId"]]
+
+    scenes = app.state.scenes
+    skeleton = scenes.compile_skeleton(last["archetypeId"], scene_id=last["sceneId"],
+                                       seed=last["sceneId"], generation_id=last["generationId"])
+    ops: list[dict] = []
+    for p in patches:
+        ops.extend(p.get("ops", []))
+    entities, setting = apply_ops(skeleton["entities"], skeleton["setting"], ops)
+    scene = SceneSession(scene_id=last["sceneId"], generation_id=last["generationId"],
+                         archetype_id=last["archetypeId"], revision=len(patches) + 1,
+                         status="filled" if patches else "skeleton",
+                         setting=setting, background=skeleton["background"],
+                         entities=entities, characters=skeleton["characters"],
+                         exits=skeleton["exits"], default_npc_id=scenes.default_npc_id(last["archetypeId"]))
+    state.scene = scene
+    state.scene_seq = int(last["sceneId"].rsplit("_", 1)[-1])
+    state.arbitration.reset(scene.default_npc_id)
+    scene_words, entity_by_word_id = scene_maps(scene)
+    state.actor = app.state.scene_factory(scene_words, entity_by_word_id, npc_id=scene.default_npc_id)
+
+    async def _send_sync() -> None:
+        await send({"type": "scene.skeleton", "sceneId": scene.scene_id, "generationId": scene.generation_id,
+                    "archetypeId": scene.archetype_id, "revision": scene.revision, "status": scene.status,
+                    "setting": scene.setting, "background": scene.background,
+                    "entities": scene.entities, "characters": scene.characters, "exits": scene.exits})
+        if ops:
+            await send({"type": "scene.patch", "sceneId": scene.scene_id, "generationId": scene.generation_id,
+                        "baseRevision": len(patches), "patchId": "replay", "ops": ops})
+        await send({"type": "scene.focus", "sceneId": scene.scene_id, "generationId": scene.generation_id,
+                    "activeSpeaker": state.arbitration.active_speaker,
+                    "focusSource": "reconnect", "focusExpiresAt": None})
+    # ws 层保证 send 可用（连接刚建立）；同步包装
+    asyncio.get_running_loop().create_task(_send_sync())
+    return True
+
+
+def apply_ops(entities: list[dict], setting: dict, ops: list[dict]) -> tuple[list[dict], dict]:
+    """白名单 patch ops 应用（/entities/<id> 与 /setting）。重放与前端共用语义。"""
+    out: dict[str, dict] = {e["id"]: e for e in entities}
+    for op in ops:
+        path = op.get("path", "")
+        if path.startswith("/entities/"):
+            eid = path[len("/entities/"):]
+            if op.get("op") in ("add", "replace") and "entity" in op:
+                out[eid] = op["entity"]
+            elif op.get("op") == "remove":
+                out.pop(eid, None)
+        elif path == "/setting" and op.get("op") == "replace":
+            setting = op.get("value", setting)
+    return list(out.values()), setting

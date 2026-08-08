@@ -10,7 +10,7 @@ import uuid
 from fastapi import APIRouter, WebSocket
 
 from app.arbitration import ArbitrationState
-from app.scene_lifecycle import enter_scene, fill_scene, scene_maps
+from app.scene_lifecycle import enter_scene, fill_scene, rebuild_from_events, scene_maps
 from app.scene_prefetch import ScenePrefetchCache  # noqa: F401
 from app.llm.concepts import resolve_word_id  # noqa: F401
 from app.settings import Settings
@@ -68,8 +68,10 @@ async def ws_session(ws: WebSocket) -> None:
             await ws.send_json(payload)
 
     if state.scene is None:
-        await enter_scene(app, events, state, session_id, send,
-                          target_archetype_id=None, source="connect")
+        replayed = rebuild_from_events(app, events, state, session_id, send)
+        if not replayed:
+            await enter_scene(app, events, state, session_id, send,
+                              target_archetype_id=None, source="connect")
 
     async def _spurious_guard() -> None:
         try:
