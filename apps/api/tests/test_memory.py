@@ -84,3 +84,128 @@ def test_apply_memory_updates_store_and_snapshot(tmp_path):
     assert mem.get_world_summary("local")["memoryPolicyVersion"] == "v1"
     snaps = [e for e in events.list_after("s1", 0) if e["event_type"] == "world_summary.snapshot"]
     assert len(snaps) == 1
+
+# --- apply_memory_updates should_touch 分支：evidence / help / ask + at-most-one 不变式 ---
+
+def test_evidence_bump_at_most_once(tmp_path):
+    """state='new' 词 → 交易内升为 learning：证据使词进 known → 只 bump 一次。"""
+    events = EventStore(tmp_path / "e.db")
+    conn = events.connection
+    store = LearningStore(conn)
+    _seed(conn)                                     # shelf 为 'new' → cache 不含它
+    mem = MemoryStore(conn)
+    now = _now()
+    wid = "word_shelf_n_1"
+    ev = {"word_id": wid, "source": "classify", "session_id": "s1"}
+    with events.write_lock:
+        conn.execute("UPDATE mastery_states SET state='learning' WHERE user_id='local' AND word_id=?",
+                     (wid,))                        # 模拟 FSRS 进入学习周期
+        assert mem.apply_memory_updates(conn, events, "local", evidence=ev, now=now) is True
+        # _store_summary 内 cache.refresh() → wid 已进 known_word_ids → 同轮不重复 +revision
+        assert mem.apply_memory_updates(conn, events, "local", evidence=ev, now=now) is False
+        conn.commit()
+    assert mem.get_revision("local") == 1
+    snaps = [e for e in events.list_after("s1", 0) if e["event_type"] == "world_summary.snapshot"]
+    assert len(snaps) == 1                           # snapshot 不重复
+
+def test_evidence_no_bump_when_word_already_known(tmp_path):
+    """词已在 known_word_ids（cache 构造前即为 learning/review）→ 证据不 bump。"""
+    events = EventStore(tmp_path / "e.db")
+    conn = events.connection
+    store = LearningStore(conn)
+    _seed(conn)
+    conn.execute("UPDATE mastery_states SET state='review' WHERE user_id='local' AND word_id='word_shelf_n_1'")
+    conn.commit()
+    mem = MemoryStore(conn)                          # 构造时 shelf 已是 review → 在 known_word_ids
+    now = _now()
+    wid = "word_shelf_n_1"
+    with events.write_lock:
+        assert mem.apply_memory_updates(conn, events, "local",
+                                        evidence={"word_id": wid, "source": "classify", "session_id": "s1"},
+                                        now=now) is False
+        conn.commit()
+    assert mem.get_revision("local") == 0
+
+_HELP_INSERT = (
+    "INSERT INTO evidence_events(evidence_id, user_id, event_seq, session_id, attempt_id, turn_id, "
+    "word_id, source, prompt_level, axis, result, confidence, created_at) "
+    "VALUES('ev_help_1','local',1,'s1','att_help','turn_help','word_loaf_n_1','help',0,'prod','correct',1.0,'2026-08-08T12:00:00Z')"
+)
+
+def test_help_bump_at_most_once(tmp_path):
+    """help 证据使 (lemma,pos) 进 helped → 只 bump 一次。"""
+    events = EventStore(tmp_path / "e.db")
+    conn = events.connection
+    store = LearningStore(conn)
+    _seed(conn)
+    mem = MemoryStore(conn)                          # helped 为空
+    now = _now()
+    wid = "word_loaf_n_1"
+    ev = {"word_id": wid, "source": "help", "session_id": "s1"}
+    with events.write_lock:
+        conn.execute(_HELP_INSERT)
+        assert mem.apply_memory_updates(conn, events, "local", evidence=ev, now=now) is True
+        # cache.refresh() → helped 已含 ('loaf','n') → 同轮不重复
+        assert mem.apply_memory_updates(conn, events, "local", evidence=ev, now=now) is False
+        conn.commit()
+    assert mem.get_revision("local") == 1
+    snaps = [e for e in events.list_after("s1", 0) if e["event_type"] == "world_summary.snapshot"]
+    assert len(snaps) == 1
+
+def test_help_no_bump_when_already_helped(tmp_path):
+    """cache 构造前已有该词 help 证据 → (lemma,pos) 在 helped → 不 bump。"""
+    events = EventStore(tmp_path / "e.db")
+    conn = events.connection
+    store = LearningStore(conn)
+    _seed(conn)
+    conn.execute(_HELP_INSERT)
+    conn.commit()
+    mem = MemoryStore(conn)                          # helped 已含 ('loaf','n')
+    now = _now()
+    with events.write_lock:
+        assert mem.apply_memory_updates(conn, events, "local",
+                                        evidence={"word_id": "word_loaf_n_1", "source": "help", "session_id": "s1"},
+                                        now=now) is False
+        conn.commit()
+    assert mem.get_revision("local") == 0
+
+_SPONTANEOUS_INSERT = (
+    "INSERT INTO spontaneous_words(user_id, lemma, pos, first_seen_at, last_seen_at, encounter_count, asked) "
+    "VALUES('local','croissant','n','2026-08-08T11:00:00Z','2026-08-08T12:00:00Z',1,1)"
+)
+
+def test_ask_bump_at_most_once(tmp_path):
+    """ask 使 (lemma,pos) 进 helped → 只 bump 一次。"""
+    events = EventStore(tmp_path / "e.db")
+    conn = events.connection
+    store = LearningStore(conn)
+    _seed(conn)
+    mem = MemoryStore(conn)                          # helped 为空
+    now = _now()
+    ask = {"lemma": "croissant", "pos": "n", "session_id": "s1"}
+    with events.write_lock:
+        conn.execute(_SPONTANEOUS_INSERT)
+        assert mem.apply_memory_updates(conn, events, "local", ask=ask, now=now) is True
+        # cache.refresh() → helped 已含 ('croissant','n') → 同轮不重复
+        assert mem.apply_memory_updates(conn, events, "local", ask=ask, now=now) is False
+        conn.commit()
+    assert mem.get_revision("local") == 1
+    snaps = [e for e in events.list_after("s1", 0) if e["event_type"] == "world_summary.snapshot"]
+    assert len(snaps) == 1
+
+def test_ask_no_bump_when_already_asked(tmp_path):
+    """cache 构造前 spontaneous_words 已 asked=1 → (lemma,pos) 在 helped → 不 bump。"""
+    events = EventStore(tmp_path / "e.db")
+    conn = events.connection
+    store = LearningStore(conn)
+    _seed(conn)
+    conn.execute(_SPONTANEOUS_INSERT)
+    conn.commit()
+    mem = MemoryStore(conn)                          # helped 已含 ('croissant','n')
+    now = _now()
+    with events.write_lock:
+        assert mem.apply_memory_updates(conn, events, "local",
+                                        ask={"lemma": "croissant", "pos": "n", "session_id": "s1"},
+                                        now=now) is False
+        conn.commit()
+    assert mem.get_revision("local") == 0
