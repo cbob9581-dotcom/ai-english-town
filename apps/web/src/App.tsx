@@ -5,6 +5,7 @@ import { DialogueDock } from './DialogueDock';
 import { useVoiceRound } from './useVoiceRound';
 import { CompanionPopover } from './CompanionPopover';
 import { ArchetypePreview } from './ArchetypePreview';
+import ProgressView from './ProgressView';
 import { useSceneStore } from './sceneStore';
 import type { Entity } from './types';
 
@@ -22,6 +23,8 @@ export default function App() {
   })));
   const isPreview = window.location.hash === '#/dev/archetypes';
   if (isPreview) return <ArchetypePreview />;
+  const isProgress = window.location.hash === '#/progress';
+  if (isProgress) return <ProgressView />;
   if (error) return <div>加载失败：{error}</div>;
   if (scene.status === 'idle') return <div>加载中…（需启动 API 8000 + 开始语音连接）</div>;
 
