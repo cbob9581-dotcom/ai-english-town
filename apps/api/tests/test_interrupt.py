@@ -43,8 +43,10 @@ async def test_explicit_interrupt_without_turn_writes_nothing(tmp_path) -> None:
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
-    # 连接即进场 plaza（scene.entered）；无活跃回合时，显式打断不追加任何事件
-    assert [e["event_type"] for e in events.list_after("sess-x", 0)] == ["scene.entered"]
+    # 连接即进场 plaza（scene.entered）+ 填充（scene.patch）；无活跃回合时，显式打断不追加 dialogue 事件
+    evs = [e["event_type"] for e in events.list_after("sess-x", 0)]
+    assert "scene.entered" in evs
+    assert not any(t.startswith("dialogue") for t in evs)
 
 
 async def test_spurious_audio_start_without_frames_ignored(tmp_path) -> None:

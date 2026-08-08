@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException
 from app.event_store import EventStore
 from app.llm.client import get_client
 from app.llm.npc_actor import NpcActor
+from app.llm.scene_director import get_scene_director
 from app.llm.tutor import CompanionTutor
 from app.llm.tutor_cache import TutorCache
 from app.llm_log import LlmLog
@@ -61,6 +62,7 @@ def create_app(events: EventStore | None = None, settings: Settings | None = Non
     app.state.tutor_cache = cache
     app.state.actor = actor
     app.state.tutor = tutor
+    app.state.director = get_scene_director(settings, client, llm_log)
     app.state.asr_client = asr_impl
     app.state.tts_client = tts_impl
     app.state.sessions = {}

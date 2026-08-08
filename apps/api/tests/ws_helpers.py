@@ -57,7 +57,7 @@ def audio_frame() -> dict:
 
 
 def make_app(tmp_path, scenario: str = "ok", slow_delta_s: float = 0.0,
-             stream_text_override: str | None = None):
+             stream_text_override: str | None = None, scene_director=None):
     events = EventStore(tmp_path / "e.db")
 
     class SlowActor:
@@ -80,6 +80,8 @@ def make_app(tmp_path, scenario: str = "ok", slow_delta_s: float = 0.0,
     app = create_app(events, Settings(tutor_cache_dir=tmp_path / "tutor-audio"),
                      asr_client=fake_asr, tts_client=fake_tts,
                      llm_client=MockAdapter(scenario, stream_text_override=stream_text_override))
+    if scene_director is not None:
+        app.state.director = scene_director
     # 每场景 actor（state.actor，Task 4 由 scene_factory 重建）也包 SlowActor，
     # 否则 slow_delta_s 的打断类测试拿到的回合 actor 不带延迟。
     base_factory = app.state.scene_factory

@@ -7,6 +7,8 @@ import uuid
 from dataclasses import dataclass, field
 
 from app.llm.concepts import resolve_word_id  # noqa: F401  （保留：后续 gesture 展开用）
+from app.llm.client import JsonParseError, LLMConnectError
+from app.llm.proposals import ProposalError, validate_proposal
 
 
 @dataclass
@@ -75,8 +77,9 @@ async def enter_scene(app, events, state, session_id, send, *,
         "entities": skeleton["entities"], "characters": skeleton["characters"],
         "exits": skeleton["exits"],
     })
-    # 阶段 3 全链路在 Task 6 接 Director；在此之前场景停留骨架（完整可玩）。
-    # 预取命中在 Task 7 从这里切走。
+    state.fill_task = asyncio.create_task(
+        fill_scene(app, events, state, session_id, send, scene_id=scene_id,
+                   seed=scene_id, generation_id=generation_id, skeleton=skeleton))
 
 
 async def _cancel_work(app, events, state, session_id) -> None:
@@ -101,3 +104,63 @@ async def _cancel_work(app, events, state, session_id) -> None:
     for task in list(state.pending_asks.values()):
         task.cancel()
     state.pending_asks.clear()
+
+
+_FALLBACK_REASON_UNKNOWN = "unknown_error"
+
+
+async def fill_scene(app, events, state, session_id, send, *,
+                     scene_id: str, seed: str, generation_id: str, skeleton: dict) -> None:
+    """Director 填充任务：提案 → 校验 → 展开 → diff → scene.patch；失败 → degraded。"""
+    scenes = app.state.scenes
+    archetype_id = state.scene.archetype_id
+    try:
+        calls = app.state.llm_log.count_session_calls(session_id)
+        if calls >= app.state.settings.llm_session_call_cap:
+            await _degrade(app, events, state, session_id, send, scene_id, generation_id, "budget")
+            return
+        async with state.semaphore:
+            # Director 总超时（含 Mock timeout 场景）：由下方 except TimeoutError 接 → _degrade
+            async with asyncio.timeout(app.state.settings.llm_total_timeout_director_s):
+                proposal = await app.state.director.propose(
+                    archetype_id=archetype_id,
+                    archetype=scenes.get_archetype(archetype_id),
+                    catalog=app.state.catalog,
+                    recent_scenes=recent_scenes(events, session_id),
+                    attempt="enter")
+        cleaned, _warnings = validate_proposal(proposal, scenes.get_archetype(archetype_id), app.state.catalog)
+        filled = scenes.compile_filled(archetype_id, scene_id=scene_id, seed=seed,
+                                       generation_id=generation_id, proposal=cleaned)
+        ops = scenes.diff_scenes(skeleton, filled)
+        if state.scene is None or state.scene.scene_id != scene_id:
+            return  # 填充期间已转场 → 丢弃
+        state.scene.status = "filled"
+        state.scene.setting = filled["setting"]
+        state.scene.entities = filled["entities"]
+        state.scene.characters = filled["characters"]
+        state.scene.exits = filled["exits"]
+        state.scene.revision += 1
+        patch_id = f"patch_{uuid.uuid4().hex[:8]}"
+        events.append(session_id, "scene.patch", {
+            "sceneId": scene_id, "generationId": generation_id,
+            "baseRevision": state.scene.revision - 1, "patchId": patch_id, "ops": ops,
+        })
+        if ops:
+            await send({"type": "scene.patch", "sceneId": scene_id, "generationId": generation_id,
+                        "baseRevision": state.scene.revision - 1, "patchId": patch_id, "ops": ops})
+    except (TimeoutError, LLMConnectError, JsonParseError, ProposalError) as e:
+        await _degrade(app, events, state, session_id, send, scene_id, generation_id,
+                       getattr(e, "reason", None) or _FALLBACK_REASON_UNKNOWN)
+    except Exception:  # noqa: BLE001 —— 填充失败不杀连接，骨架停留
+        await _degrade(app, events, state, session_id, send, scene_id, generation_id, "unknown_error")
+
+
+async def _degrade(app, events, state, session_id, send, scene_id, generation_id, reason: str) -> None:
+    if state.scene is None or state.scene.scene_id != scene_id:
+        return
+    state.scene.status = "degraded"
+    events.append(session_id, "scene.degraded", {
+        "sceneId": scene_id, "generationId": generation_id, "reason": reason, "fallbackReason": reason,
+    })
+    await send({"type": "scene.degraded", "sceneId": scene_id,
+                "generationId": generation_id, "reason": reason, "fallbackReason": reason})

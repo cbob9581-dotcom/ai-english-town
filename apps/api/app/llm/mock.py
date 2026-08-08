@@ -94,3 +94,57 @@ class MockAdapter:
                 except (json.JSONDecodeError, TypeError, AttributeError):
                     continue
         return "loaf"
+
+
+MOCK_SCENE_SCENARIO = frozenset({
+    "ok", "timeout", "connect_error", "invalid_json", "slot_mismatch",
+    "unknown_word", "too_many_entities", "partial_fills", "duplicate_slot",
+})
+
+
+class MockSceneDirector:
+    """确定性 mock：无 key 时的 SceneDirector。故障注入见 MOCK_SCENE_SCENARIO。"""
+
+    def __init__(self, scenario: str = "ok") -> None:
+        if scenario not in MOCK_SCENE_SCENARIO:
+            raise ValueError(f"unknown mock scene scenario: {scenario}")
+        self.scenario = scenario
+
+    async def propose(self, *, archetype_id: str, archetype: dict, catalog,
+                      recent_scenes: list[str], attempt: str = "enter") -> dict:
+        if self.scenario == "timeout":
+            await asyncio.sleep(60)                       # 外层 director timeout 取消它
+        if self.scenario == "connect_error":
+            raise LLMConnectError("mock scene connect error")
+        if self.scenario == "invalid_json":
+            raise JsonParseError("mock scene invalid json")
+        slots = archetype["propSlots"]
+        npc_slots = archetype.get("npcSlots", [])
+        first_concepts = {cat: catalog.concepts_in(cat)[0].concept_id
+                          for s in slots for cat in s["categories"] if catalog.concepts_in(cat)}
+
+        def _fill(slot_id: str) -> dict:
+            s = next(x for x in slots if x["slotId"] == slot_id)
+            cat = next(c for c in s["categories"] if c in first_concepts)
+            return {"slotId": slot_id, "conceptId": first_concepts[cat]}
+
+        if self.scenario == "slot_mismatch":
+            return {"fills": [{"slotId": "no.such.slot", "conceptId": "x"}],
+                    "characters": [], "setting": {"displayName": "Broken", "time": "morning"}}
+        if self.scenario == "unknown_word":
+            fills = [_fill(slots[0]["slotId"])] + [{"slotId": slots[-1]["slotId"], "conceptId": "concept.ghost"}]
+            return {"fills": fills, "characters": [], "setting": {"displayName": "Ghost", "time": "morning"}}
+        if self.scenario == "duplicate_slot":
+            return {"fills": [_fill(slots[0]["slotId"]), _fill(slots[0]["slotId"])],
+                    "characters": [], "setting": {"displayName": "Dup", "time": "morning"}}
+        if self.scenario == "too_many_entities":
+            return {"fills": [_fill(slots[0]["slotId"]) for _ in range(45)],
+                    "characters": [], "setting": {"displayName": "Many", "time": "morning"}}
+        if self.scenario == "partial_fills":
+            fills = [_fill(slots[0]["slotId"])] if slots else []
+            return {"fills": fills, "characters": [], "setting": {"displayName": "Partial", "time": "morning"}}
+
+        fills = [_fill(s["slotId"]) for s in slots if any(c in first_concepts for c in s["categories"])]
+        chars = [{"slotId": s["slotId"], "npcId": catalog.npcs_in(s["role"])[0].npc_id} for s in npc_slots]
+        return {"fills": fills, "characters": chars,
+                "setting": {"displayName": f"{archetype_id.title()} Scene", "time": "morning"}}
