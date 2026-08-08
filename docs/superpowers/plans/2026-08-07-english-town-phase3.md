@@ -1624,7 +1624,7 @@ Expected: FAIL（404）。
 ```python
 # apps/api/app/main.py
     @app.get("/api/dev/archetypes")
-    def dev_archetypes() -> dict:
+    def dev_archetypes() -> list[dict]:
         out = []
         for aid in sorted(scenes.list_archetype_ids()):
             arche = scenes.get_archetype(aid)
