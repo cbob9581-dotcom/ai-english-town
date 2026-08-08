@@ -1,17 +1,15 @@
 {
-  "archetypeId": "library",
-  "displayName": "小镇图书馆",
-  "background": {
-    "style": "gradient",
-    "gradient": "linear-gradient(#f4ead8 0%, #e6d5b8 55%, #a98a5e 56%, #8a6a3e 100%)",
-    "decor": ["bench"],
-    "ambienceKey": "ambience/library_loop.ogg"
-  },
+  "archetypeId": "library", "displayName": "图书馆",
+  "background": { "style": "gradient", "gradient": "linear-gradient(#e6dcc0 0%, #f0e8d2 45%, #a88b5a 46%, #8a6f42 100%)", "decor": ["shelf", "window"], "ambienceKey": "ambience/library_loop.ogg" },
   "zones": {
-    "desk": { "x": [80, 920], "y": [420, 820], "anchor": "bottom" }
+    "desk": { "x": [380, 700], "y": [560, 820], "anchor": "bottom" },
+    "shelf": { "x": [80, 360], "y": [180, 520], "anchor": "center" },
+    "reading": { "x": [700, 940], "y": [200, 540], "anchor": "center" }
   },
   "propSlots": [
-    { "slotId": "desk.table", "zone": "desk", "categories": ["paper", "furniture"] }
+    { "slotId": "desk.book", "zone": "desk", "categories": ["stationery", "paper"] },
+    { "slotId": "shelf.dictionary", "zone": "shelf", "categories": ["stationery", "paper"] },
+    { "slotId": "reading.lamp", "zone": "reading", "categories": ["decoration", "product"] }
   ],
   "npcSlots": [ { "slotId": "librarian", "zone": "desk", "role": "librarian" } ],
   "exits": [ { "direction": "left", "targetKind": "any" } ]

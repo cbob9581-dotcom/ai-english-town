@@ -1,17 +1,15 @@
 {
-  "archetypeId": "park",
-  "displayName": "城市公园",
-  "background": {
-    "style": "gradient",
-    "gradient": "linear-gradient(#cdeffd 0%, #aee3ff 45%, #86b871 46%, #5d9e50 100%)",
-    "decor": ["tree", "bench"],
-    "ambienceKey": "ambience/park_loop.ogg"
-  },
+  "archetypeId": "park", "displayName": "城市公园",
+  "background": { "style": "gradient", "gradient": "linear-gradient(#bfe9a8 0%, #d8f3c8 45%, #7cb25f 46%, #5f9448 100%)", "decor": ["tree", "bench"], "ambienceKey": "ambience/park_loop.ogg" },
   "zones": {
-    "meadow": { "x": [80, 920], "y": [420, 820], "anchor": "bottom" }
+    "meadow": { "x": [300, 700], "y": [420, 760], "anchor": "bottom" },
+    "pond": { "x": [80, 300], "y": [300, 620], "anchor": "center" },
+    "path": { "x": [700, 940], "y": [500, 760], "anchor": "bottom" }
   },
   "propSlots": [
-    { "slotId": "meadow.tree", "zone": "meadow", "categories": ["nature"] }
+    { "slotId": "meadow.flowers", "zone": "meadow", "categories": ["nature", "decoration"] },
+    { "slotId": "pond.duck", "zone": "pond", "categories": ["nature"] },
+    { "slotId": "path.bench", "zone": "path", "categories": ["furniture"] }
   ],
   "npcSlots": [ { "slotId": "keeper", "zone": "meadow", "role": "guard" } ],
   "exits": [ { "direction": "down", "targetKind": "any" } ]

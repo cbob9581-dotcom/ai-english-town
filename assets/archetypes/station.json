@@ -1,21 +1,16 @@
 {
-  "archetypeId": "station",
-  "displayName": "小镇车站",
-  "background": {
-    "style": "gradient",
-    "gradient": "linear-gradient(#e8ecf2 0%, #cfd8e3 55%, #8a94a6 56%, #6b7588 100%)",
-    "decor": ["bench"],
-    "ambienceKey": "ambience/station_loop.ogg"
-  },
+  "archetypeId": "station", "displayName": "火车站",
+  "background": { "style": "gradient", "gradient": "linear-gradient(#c8ccd4 0%, #e3e6ec 45%, #8d939e 46%, #6f7580 100%)", "decor": ["window", "sign"], "ambienceKey": "ambience/station_loop.ogg" },
   "zones": {
-    "platform": { "x": [80, 920], "y": [420, 820], "anchor": "bottom" }
+    "platform": { "x": [120, 880], "y": [480, 820], "anchor": "bottom" },
+    "board": { "x": [380, 620], "y": [140, 380], "anchor": "center" },
+    "ticket": { "x": [80, 340], "y": [200, 440], "anchor": "center" }
   },
   "propSlots": [
-    { "slotId": "platform.bench", "zone": "platform", "categories": ["furniture", "paper"] }
+    { "slotId": "board.screen", "zone": "board", "categories": ["product", "decoration"] },
+    { "slotId": "ticket.machine", "zone": "ticket", "categories": ["product"] },
+    { "slotId": "platform.sign", "zone": "platform", "categories": ["decoration"] }
   ],
   "npcSlots": [ { "slotId": "conductor", "zone": "platform", "role": "conductor" } ],
-  "exits": [
-    { "direction": "left", "targetKind": "any" },
-    { "direction": "right", "targetKind": "any" }
-  ]
+  "exits": [ { "direction": "left", "targetKind": "any" }, { "direction": "right", "targetKind": "any" } ]
 }

@@ -7,7 +7,7 @@
   "door.wooden":  { "emoji": "🚪", "label": "door" },
   "decor.window": { "emoji": "🌞", "label": "window" },
   "decor.shelf":  { "emoji": "🪵", "label": "shelf" },
-  "decor.sign":   { "emoji": "☕", "label": "sign" },
+  "decor.sign":   { "emoji": "🪧", "label": "sign" },
   "decor.fountain":     { "emoji": "⛲", "label": "fountain" },
   "decor.tree":         { "emoji": "🌳", "label": "tree" },
   "decor.bench":        { "emoji": "🪑", "label": "bench" },
@@ -20,5 +20,16 @@
   "npc.guard":       { "emoji": "🧑‍✈️", "label": "guard" },
   "npc.conductor":   { "emoji": "👩‍✈️", "label": "conductor" },
   "npc.barista":     { "emoji": "🧑‍🍳", "label": "barista" },
-  "npc.librarian":   { "emoji": "👩‍🏫", "label": "librarian" }
+  "npc.librarian":   { "emoji": "👩‍🏫", "label": "librarian" },
+  "drink.coffee":      { "emoji": "☕", "label": "coffee" },
+  "drink.tea":         { "emoji": "🍵", "label": "tea" },
+  "drink.milk":        { "emoji": "🥛", "label": "milk" },
+  "product.screen":    { "emoji": "🖥️", "label": "screen" },
+  "product.machine":   { "emoji": "🎫", "label": "machine" },
+  "product.lamp":      { "emoji": "💡", "label": "lamp" },
+  "stationery.book":   { "emoji": "📕", "label": "book" },
+  "stationery.dictionary": { "emoji": "📖", "label": "dictionary" },
+  "container.jar":     { "emoji": "🫙", "label": "jar" },
+  "deco.flower":       { "emoji": "🌸", "label": "flower" },
+  "nature.duck":       { "emoji": "🦆", "label": "duck" }
 }

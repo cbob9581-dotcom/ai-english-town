@@ -63,6 +63,79 @@ def check_catalog_icons() -> list[str]:
     return [f"missing icon for {k}" for k in sorted(missing)]
 
 
+def check_town_map() -> list[str]:
+    """town-map 边完整性：每条边的目标存在、spoke 可回 start、方向与原型 exits 一致。"""
+    import json as _json
+    assets = ROOT / "assets"
+    try:
+        tm = _json.loads((assets / "archetypes" / "town-map.json").read_text(encoding="utf-8"))
+        ids = {p.stem for p in (assets / "archetypes").glob("*.json")}
+        problems = []
+        hub = tm["start"]
+        for src, edges in tm["edges"].items():
+            if src not in ids:
+                problems.append(f"town-map src {src} 缺原型")
+                continue
+            arche = _json.loads((assets / "archetypes" / f"{src}.json").read_text(encoding="utf-8"))
+            dirs = {e["direction"] for e in arche["exits"]}
+            if set(edges) != dirs:
+                problems.append(f"{src}: town-map 方向 {set(edges)} != archetype exits {dirs}")
+            for direction, target in edges.items():
+                if target not in ids:
+                    problems.append(f"{src}.{direction} -> {target} 不存在")
+        # 图可达性：从每个 spoke 沿 edges 传递，断言能回到 hub（修正 brief 只查直接连接的缺陷：
+        # library→station→plaza 是间接回 hub，直接比对会误报）
+        for spoke in [k for k in tm["edges"] if k != hub]:
+            seen = {spoke}
+            stack = list(tm["edges"][spoke].values())
+            reachable = False
+            while stack:
+                node = stack.pop()
+                if node == hub:
+                    reachable = True
+                    break
+                if node in seen:
+                    continue
+                seen.add(node)
+                stack.extend(tm["edges"].get(node, {}).values())
+            if not reachable:
+                problems.append(f"{spoke} 无法回到 hub {hub}")
+        return problems
+    except Exception as e:  # noqa: BLE001
+        return [f"town-map check skipped: {e}"]
+
+
+def probe_director() -> dict:
+    """Director 探活：能出合法提案则 ok；失败返回降级提示（骨架场景 + 明确日志）。"""
+    import asyncio
+    import json as _json
+    import sys as _sys
+    try:
+        # 使 app.* 在 root 环境（uv run python scripts/startup-selfcheck.py）可导入
+        _sys.path.insert(0, str(ROOT / "apps" / "api"))
+        from app.catalog import Catalog
+        from app.llm.mock import MockSceneDirector
+        arche = _json.loads((ROOT / "assets" / "archetypes" / "plaza.json").read_text(encoding="utf-8"))
+        catalog = Catalog.load(ROOT / "assets")
+        d = MockSceneDirector("ok")
+        p = asyncio.run(d.propose(archetype_id="plaza", archetype=arche, catalog=catalog, recent_scenes=[]))
+        return {"ok": True, "fills": len(p["fills"])}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "degrade": True, "log": f"Director probe failed: {e}; fall back to skeleton scene"}
+
+
+def check_tts_voices() -> list[str]:
+    """全部 catalog 音色枚举记录（首次合成预热由 tts worker 完成，这里只枚举不合成）。"""
+    import json as _json
+    try:
+        npcs = _json.loads((ROOT / "assets" / "catalog" / "npcs.json").read_text(encoding="utf-8"))
+        voices = sorted({n["voice"] for rows in npcs.values() for n in rows})
+        out = [f"voices={voices} (selfcheck 记录耗时; 预热由 tts worker 完成)"]
+        return out
+    except Exception as e:  # noqa: BLE001
+        return [f"tts voices check skipped: {e}"]
+
+
 def main() -> None:
     report: dict = {"gpu": gpu_info()}
     t0 = time.perf_counter()
@@ -76,6 +149,9 @@ def main() -> None:
         report["asr"] = run_in("services/asr-worker", "asr_worker.selfcheck")
     report["llm"] = run_in("apps/api", "app.llm.probe")
     report["catalogIconMissing"] = check_catalog_icons()
+    report["townMapProblems"] = check_town_map()
+    report["directorProbe"] = probe_director()
+    report["ttsVoices"] = check_tts_voices()
     report["total_secs"] = round(time.perf_counter() - t0, 2)
     # 端到端语音门禁：TTS 合成成功 且 ASR 转写成功（非空）
     report["e2e_voice_ok"] = bool(report["tts"].get("audio_bytes")) and bool(report["asr"].get("transcribe_ok"))

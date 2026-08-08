@@ -11,9 +11,29 @@
     {"conceptId": "concept.nature.tree", "name": "tree", "lemma": "tree", "pos": "n", "visualKey": "nature.tree"}
   ],
   "decoration": [
-    {"conceptId": "concept.deco.fountain", "name": "fountain", "lemma": "fountain", "pos": "n", "visualKey": "deco.fountain"}
+    {"conceptId": "concept.deco.flower", "name": "flower", "lemma": "flower", "pos": "n", "visualKey": "deco.flower"},
+    {"conceptId": "concept.deco.duck", "name": "duck", "lemma": "duck", "pos": "n", "visualKey": "nature.duck"},
+    {"conceptId": "concept.deco.fountain", "name": "fountain", "lemma": "fountain", "pos": "n", "visualKey": "deco.fountain"},
+    {"conceptId": "concept.deco.sign", "name": "sign", "lemma": "sign", "pos": "n", "visualKey": "decor.sign"}
   ],
   "furniture": [
     {"conceptId": "concept.furn.bench", "name": "bench", "lemma": "bench", "pos": "n", "visualKey": "furniture.bench"}
+  ],
+  "drink": [
+    {"conceptId": "concept.drink.coffee", "name": "coffee", "lemma": "coffee", "pos": "n", "visualKey": "drink.coffee"},
+    {"conceptId": "concept.drink.tea", "name": "tea", "lemma": "tea", "pos": "n", "visualKey": "drink.tea"},
+    {"conceptId": "concept.drink.milk", "name": "milk", "lemma": "milk", "pos": "n", "visualKey": "drink.milk"}
+  ],
+  "product": [
+    {"conceptId": "concept.product.screen", "name": "screen", "lemma": "screen", "pos": "n", "visualKey": "product.screen"},
+    {"conceptId": "concept.product.machine", "name": "machine", "lemma": "machine", "pos": "n", "visualKey": "product.machine"},
+    {"conceptId": "concept.product.lamp", "name": "lamp", "lemma": "lamp", "pos": "n", "visualKey": "product.lamp"}
+  ],
+  "stationery": [
+    {"conceptId": "concept.stationery.book", "name": "book", "lemma": "book", "pos": "n", "visualKey": "stationery.book"},
+    {"conceptId": "concept.stationery.dictionary", "name": "dictionary", "lemma": "dictionary", "pos": "n", "visualKey": "stationery.dictionary"}
+  ],
+  "container": [
+    {"conceptId": "concept.container.jar", "name": "jar", "lemma": "jar", "pos": "n", "visualKey": "container.jar"}
   ]
 }

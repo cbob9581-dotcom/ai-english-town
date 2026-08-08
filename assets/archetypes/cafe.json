@@ -1,17 +1,15 @@
 {
-  "archetypeId": "cafe",
-  "displayName": "街角咖啡馆",
-  "background": {
-    "style": "gradient",
-    "gradient": "linear-gradient(#ffe8d0 0%, #ffd9a8 55%, #b98a5e 56%, #8a5a34 100%)",
-    "decor": ["bench"],
-    "ambienceKey": "ambience/cafe_loop.ogg"
-  },
+  "archetypeId": "cafe", "displayName": "咖啡馆",
+  "background": { "style": "gradient", "gradient": "linear-gradient(#f4e3c0 0%, #faeed4 45%, #b98355 46%, #9a6a42 100%)", "decor": ["window", "sign"], "ambienceKey": "ambience/cafe_loop.ogg" },
   "zones": {
-    "counter": { "x": [80, 920], "y": [420, 820], "anchor": "bottom" }
+    "counter": { "x": [300, 700], "y": [580, 820], "anchor": "bottom" },
+    "table": { "x": [80, 300], "y": [280, 560], "anchor": "center" },
+    "bar": { "x": [700, 940], "y": [300, 600], "anchor": "center" }
   },
   "propSlots": [
-    { "slotId": "counter.table", "zone": "counter", "categories": ["food", "furniture"] }
+    { "slotId": "counter.cake", "zone": "counter", "categories": ["food", "drink"] },
+    { "slotId": "table.cup", "zone": "table", "categories": ["drink", "food"] },
+    { "slotId": "bar.milk", "zone": "bar", "categories": ["drink"] }
   ],
   "npcSlots": [ { "slotId": "barista", "zone": "counter", "role": "barista" } ],
   "exits": [ { "direction": "left", "targetKind": "any" } ]
