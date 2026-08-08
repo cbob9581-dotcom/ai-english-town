@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "words": [
+    { "lemma": "loaf", "pos": "n", "senses": ["一条面包"],
+      "ipa": "/loʊf/", "cefr": "A2", "sceneTags": ["bakery"],
+      "carrier": "object", "slotCategories": ["food"] },
+    { "lemma": "bread", "pos": "n", "senses": ["面包"],
+      "ipa": "/bred/", "cefr": "A1", "sceneTags": ["bakery", "cafe"],
+      "carrier": "object", "slotCategories": ["food"] },
+    { "lemma": "order", "pos": "v", "senses": ["点（餐）", "订购"],
+      "ipa": "/ˈɔːrdər/", "cefr": "A2", "sceneTags": ["bakery", "cafe"],
+      "carrier": "phrase", "slotCategories": [] },
+    { "lemma": "buy", "pos": "v", "senses": ["买"],
+      "ipa": "/baɪ/", "cefr": "A1", "sceneTags": ["bakery", "cafe", "station"],
+      "carrier": "action", "slotCategories": [] }
+  ]
+}
