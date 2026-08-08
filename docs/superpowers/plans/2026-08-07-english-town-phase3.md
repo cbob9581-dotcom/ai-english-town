@@ -3109,17 +3109,21 @@ export const useSceneStore = create<SceneState>((set) => ({
 
 ```tsx
 // apps/web/src/App.tsx
+import { useShallow } from 'zustand/react/shallow';
 import { useSceneStore } from './sceneStore';
 
 export default function App() {
-  const [error, setError] = useState<string | null>(null);
+  // 去掉 fetchScene 后 setError 无人调用 → tsconfig noUnusedLocals 报错 → 用 const [error]（保留渲染分支）
+  const [error] = useState<string | null>(null);
   const [focusEntity, setFocusEntity] = useState<Entity | null>(null);
   const { micOn, status, turns, companion, start, stop, beginUtterance, interrupt, askCompanion, requestScene, hintScene, focusNpc } = useVoiceRound('sess-1', `ws://${location.hostname}:8000/ws/sessions/sess-1`);
-  const scene = useSceneStore((s) => ({
+  // 内联对象 selector 必须包 useShallow：zustand v5 + React 19 用 Object.is 比较快照，
+  // 每次调用返回新对象字面量 → 恒判变更 → 无限重渲染崩溃（含 /dev/archetypes 预览）。
+  const scene = useSceneStore(useShallow((s) => ({
     status: s.status, sceneId: s.sceneId, generationId: s.generationId,
     archetypeId: s.archetypeId, setting: s.setting, background: s.background,
     entities: s.entities, exits: s.exits,
-  }));
+  })));
   const isPreview = window.location.hash === '#/dev/archetypes';
   if (isPreview) return <ArchetypePreview />;
   if (error) return <div>加载失败：{error}</div>;
