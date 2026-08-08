@@ -3189,7 +3189,7 @@ git commit -m "feat(web): Zustand scene store + WS scene handling + dual gates w
 ### Task 11: 回合仲裁 + gesture 后端
 
 **Files:**
-- Modify: `apps/api/app/ws.py`（`npc.focus` 处理 + `scene.focus` 广播 + persona 切换）、`apps/api/app/llm/npc_actor.py`（`npc.turn.metadata` 带 `gesture`）
+- Modify: `apps/api/app/ws.py`（`npc.focus` 处理 + `scene.focus` 广播 + persona 切换）、`apps/api/app/llm/npc_actor.py`（`npc.turn.metadata` 带 `gesture`）、`apps/api/app/main.py`（`scene_factory` 补传 `entity_by_word_id` 给 `NpcActor`）
 - Create: `apps/api/app/llm/gesture.py`
 - Test: `apps/api/tests/test_gesture.py`、`apps/api/tests/test_arbitration.py`（补 WS 集成）、`apps/api/tests/test_npc_actor.py`（补 gesture 产出）
 
@@ -3360,6 +3360,8 @@ async def test_metadata_carries_point_gesture_when_word_mentioned() -> None:
                     await _handle_npc_focus(ctrl)
 ```
 
+> **接线缺口（必须一并修）**：`apps/api/app/main.py` 的 `scene_factory` 签名接收 `entity_by_word_id` 但构造 `NpcActor` 时未传（当前为 `NpcActor(client, settings, llm_log, scene_words, lambda u: scripted_reply(u)["speech"], persona=persona)`）。`enter_scene`/断线重放/`_handle_npc_focus` 全部经 factory 建 actor，不补传则 gesture 在真实 WS 链路上恒为 None。补传：`NpcActor(..., persona=persona, entity_by_word_id=entity_by_word_id)`。提交时 `git add` 须包含 `apps/api/app/main.py`。
+
 - [ ] **Step 5: WS 仲裁集成测试**
 
 ```python
@@ -3380,7 +3382,6 @@ async def test_npc_focus_switches_active_speaker_and_broadcasts(tmp_path) -> Non
     assert st.scene is not None
     gen = st.scene.generation_id
     sid = st.scene.scene_id
-    await st.arbitration.__class__  # noqa
     # 直接注入 focus 消息（FakeWS 已消费 sleep，追加一条新消息需要重建 ws 会话）
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
@@ -3413,8 +3414,10 @@ async def test_stale_generation_focus_ignored(tmp_path) -> None:
     with pytest.raises(asyncio.CancelledError):
         await task
     st = app.state.sessions["sess-x"]
-    assert st.arbitration.active_speaker != "npc:npc_tom" or st.scene is None
-    # 场景默认（plaza → Tom 是默认），旧 gen 不得改写成非默认
+    # 场景默认（plaza → Tom 是默认），旧 gen 的 npc.focus 必须整体忽略：
+    # 不切 focus_source、不设过期、不广播 scene.focus（若被处理，focus_source 会变 user_click 且 focus_expires_ms 被设值）
+    assert st.arbitration.focus_source == "scene_default"
+    assert st.arbitration.focus_expires_ms is None
     assert not any(isinstance(m, dict) and m.get("type") == "scene.focus" for m in ws.sent)
 ```
 > 注：`test_npc_focus_switches...` 用 `json` 需顶部 `import json`。
