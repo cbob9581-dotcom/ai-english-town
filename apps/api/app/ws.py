@@ -11,8 +11,6 @@ from fastapi import APIRouter, WebSocket
 
 from app.arbitration import ArbitrationState
 from app.scene_lifecycle import enter_scene, fill_scene, rebuild_from_events, scene_maps
-from app.scene_prefetch import ScenePrefetchCache  # noqa: F401
-from app.llm.concepts import resolve_word_id  # noqa: F401
 from app.settings import Settings
 from app.voice_round import run_round
 
@@ -120,6 +118,10 @@ async def ws_session(ws: WebSocket) -> None:
             state.round_task = None
 
     async def _handle_companion_ask(entity_id: str) -> None:
+        # genId 必须在 ask 时刻捕获（ask 所在场景），而非 reply 发射时刻：
+        # 若 ask→reply 之间发生转场，发射时 state.generation_id 已是新场景的 genId，
+        # 前端会误收为新场景回复；ask 时刻的旧 genId 正确触发前端跨场景丢弃。
+        gen_id = state.generation_id
         entry = None
         if state.scene:
             entry = next(((e["semantics"]["wordId"], e["semantics"]["name"])
@@ -127,7 +129,8 @@ async def ws_session(ws: WebSocket) -> None:
                           if e["id"] == entity_id and e.get("semantics", {}).get("wordId")), None)
         if entry is None:
             await send({"type": "companion.reply", "turnId": f"comp_{uuid.uuid4().hex[:8]}",
-                        "word": "", "scaffold": "", "degraded": True, "error": "unknown_entity"})
+                        "word": "", "scaffold": "", "degraded": True, "error": "unknown_entity",
+                        "generationId": gen_id})
             return
         word_id, word = entry
 
@@ -140,12 +143,13 @@ async def ws_session(ws: WebSocket) -> None:
                             word_id=word_id, word=word)
                 except Exception:  # noqa: BLE001 —— tutor 异常逃逸 → 降级 reply，绝不静默丢 companion.ask
                     await send({"type": "companion.reply", "turnId": f"comp_{uuid.uuid4().hex[:8]}",
-                                "word": "", "scaffold": "", "degraded": True, "error": "tutor_failed"})
+                                "word": "", "scaffold": "", "degraded": True, "error": "tutor_failed",
+                                "generationId": gen_id})
                     return
                 turn_id = f"comp_{uuid.uuid4().hex[:8]}"
                 await send({"type": "companion.reply", "turnId": turn_id,
                             "word": res.word, "scaffold": res.scaffold,
-                            "degraded": res.degraded})
+                            "degraded": res.degraded, "generationId": gen_id})
                 if res.audio_base64 is not None:
                     state.is_playing = True
                     await send({"type": "tts.audio.start", "generationId": state.generation_id,

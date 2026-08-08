@@ -34,6 +34,22 @@ async def test_companion_ask_returns_reply_and_audio(tmp_path) -> None:
     assert app.state.tutor_cache.get("word_fountain_n_1") is not None
 
 
+async def test_companion_reply_carries_generation_id(tmp_path) -> None:
+    """gate matrix：companion.reply 必须携带 generationId（= 会话当前场景 genId），
+    前端据此丢弃跨场景的迟到回复。"""
+    events, app = make_app(tmp_path, scenario="ok")
+    ws = FakeWS([_companion_ask("fountain.center-1")], app)
+    task = asyncio.create_task(ws_session(ws))
+    await asyncio.sleep(0.4)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    replies = [m for m in ws.sent if isinstance(m, dict) and m.get("type") == "companion.reply"]
+    assert len(replies) == 1
+    gen_id = app.state.sessions["sess-x"].scene.generation_id
+    assert replies[0]["generationId"] == gen_id
+
+
 async def test_companion_ask_unknown_entity(tmp_path) -> None:
     events, app = make_app(tmp_path)
     ws = FakeWS([_companion_ask("no-such-entity")], app)
@@ -44,6 +60,9 @@ async def test_companion_ask_unknown_entity(tmp_path) -> None:
         await task
     replies = [m for m in ws.sent if isinstance(m, dict) and m.get("type") == "companion.reply"]
     assert replies and replies[0]["error"] == "unknown_entity"
+    # 降级路径同样必须携带 generationId（前端统一按 genId 丢弃陈旧回复）
+    gen_id = app.state.sessions["sess-x"].scene.generation_id
+    assert replies[0]["generationId"] == gen_id
 
 
 async def test_same_entity_inflight_merged(tmp_path) -> None:

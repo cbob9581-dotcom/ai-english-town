@@ -6,7 +6,6 @@ import asyncio
 import uuid
 from dataclasses import dataclass, field
 
-from app.llm.concepts import resolve_word_id  # noqa: F401  （保留：后续 gesture 展开用）
 from app.llm.client import APIStatusError, JsonParseError, LLMConnectError
 from app.llm.proposals import ProposalError, validate_proposal
 

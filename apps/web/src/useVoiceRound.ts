@@ -103,6 +103,7 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
       audioTurnIdRef.current = null;
       queueRef.current.clear();
       setDiscovered(new Set());             // 新场景：本场景点过的实体 reset
+      setLastGesture(null);                 // 新场景：旧 gesture（point 高亮）不残留到同名实体 id
       useSceneStore.getState().applySkeleton(m);
     });
     sock.on('scene.patch', (m: any) => {
@@ -143,6 +144,7 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
       setLastGesture(m.gesture ?? null);
     });
     sock.on('companion.reply', (m: any) => {
+      if (currentGenIdRef.current !== m.generationId) return;  // 跨场景迟到 reply → 丢弃（缺 genId 也丢，安全方向）
       if (m.error) return;
       companionTurnIdRef.current = m.turnId;
       setCompanion({ word: m.word, scaffold: m.scaffold });

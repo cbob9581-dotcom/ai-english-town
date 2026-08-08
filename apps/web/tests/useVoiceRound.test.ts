@@ -186,7 +186,17 @@ describe('useVoiceRound protocol', () => {
     const { result, sock, emit } = await startHook();
     act(() => result.current.askCompanion('loaf-1'));
     expect(sock.sent).toEqual([{ type: 'companion.ask', entityId: 'loaf-1' }]);
-    act(() => emit('companion.reply', { type: 'companion.reply', turnId: 'c1', word: 'loaf', scaffold: 'A loaf is bread.', degraded: false }));
+    act(() => emit('companion.reply', { type: 'companion.reply', generationId: 'g', turnId: 'c1', word: 'loaf', scaffold: 'A loaf is bread.', degraded: false }));
+    expect(result.current.companion).toEqual({ word: 'loaf', scaffold: 'A loaf is bread.' });
+  });
+
+  it('companion.reply gated by generationId：跨场景迟到 reply 被丢弃，当前场景 reply 写入', async () => {
+    const { result, emit } = await startHook();
+    // 旧场景（g2）的迟到 reply → 丢弃（companion 状态保持 null）
+    act(() => emit('companion.reply', { type: 'companion.reply', generationId: 'g2', turnId: 'c1', word: 'stale', scaffold: 'x', degraded: false }));
+    expect(result.current.companion).toBeNull();
+    // 当前场景（g）的 reply → 写入
+    act(() => emit('companion.reply', { type: 'companion.reply', generationId: 'g', turnId: 'c2', word: 'loaf', scaffold: 'A loaf is bread.', degraded: false }));
     expect(result.current.companion).toEqual({ word: 'loaf', scaffold: 'A loaf is bread.' });
   });
 });
@@ -239,7 +249,7 @@ describe('useVoiceRound scene messages', () => {
     expect(sock.sent.some((m: any) => m.type === 'npc.focus' && m.characterId === 'npc_rosa')).toBe(true);
   });
 
-  it('toggleDiscover toggles per-scene discovered; scene.skeleton resets it', async () => {
+  it('toggleDiscover toggles per-scene discovered; scene.skeleton resets discovered + lastGesture', async () => {
     const { result, emit } = await startHook();
     act(() => result.current.toggleDiscover('loaf-1'));
     expect(result.current.discovered.has('loaf-1')).toBe(true);
@@ -247,7 +257,12 @@ describe('useVoiceRound scene messages', () => {
     expect(result.current.discovered.has('loaf-1')).toBe(false);
     act(() => result.current.toggleDiscover('loaf-1'));
     expect(result.current.discovered.size).toBe(1);
-    // 换场景：新 skeleton → 本场景 discovered 清空（不携带旧场景的实体 id）
+    // 本轮 metadata 设置了一个 gesture（黄色 outline 高亮实体）
+    act(() => result.current.beginUtterance());
+    act(() => emit('npc.turn.metadata', { type: 'npc.turn.metadata', generationId: 'g', turnId: 't1', candidateWordIds: [], gesture: { type: 'point', entityId: 'door-1' } }));
+    expect(result.current.lastGesture).toEqual({ type: 'point', entityId: 'door-1' });
+    // 换场景：新 skeleton → 本场景 discovered 清空（不携带旧场景的实体 id），
+    // lastGesture 也清空（旧场景的 point 高亮不能残留到同名实体 id，如 door-1）
     act(() => emit('scene.skeleton', {
       type: 'scene.skeleton', sceneId: 's2', generationId: 'g2', archetypeId: 'bakery',
       revision: 1, status: 'skeleton',
@@ -256,5 +271,6 @@ describe('useVoiceRound scene messages', () => {
       entities: [], characters: [], exits: [],
     }));
     expect(result.current.discovered.size).toBe(0);
+    expect(result.current.lastGesture).toBeNull();
   });
 });
