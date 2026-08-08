@@ -1,6 +1,7 @@
 """证据分类 + 更新规则 + 日闸（纯函数 + store 更新，由引擎在单事务内调用）。"""
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime
 
 from app.learning import fsrs as fsrs_mod
@@ -46,7 +47,7 @@ def classify_round(scene_words: dict[str, str], npc_text: str, user_text: str,
 
 
 def _card_id(wid: str) -> int:
-    return int.from_bytes(wid.encode()[:4], "big")
+    return int.from_bytes(hashlib.sha1(wid.encode()).digest()[:4], "big")
 
 
 def apply_evidence(store, user_id: str, ev: dict, *, now: datetime) -> None:

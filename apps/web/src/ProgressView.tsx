@@ -26,7 +26,7 @@ interface Summary {
 }
 
 interface EvidenceItem {
-  evidenceId: string;
+  evidence_id: string;
   source: string;
   axis: string;
   result: string;
@@ -190,7 +190,7 @@ export default function ProgressView() {
               >
                 {items.length > 0 ? (
                   items.map((ev) => (
-                    <div key={ev.evidenceId}>
+                    <div key={ev.evidence_id}>
                       {ev.created_at} · {ev.axis} · {ev.result}（置信度 {ev.confidence.toFixed(2)}）
                     </div>
                   ))
