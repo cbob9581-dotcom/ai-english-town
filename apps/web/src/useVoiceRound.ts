@@ -15,6 +15,7 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
   const [status, setStatus] = useState('idle');
   const [turns, setTurns] = useState<Turn[]>([]);
   const [companion, setCompanion] = useState<CompanionState | null>(null);
+  const [lastGesture, setLastGesture] = useState<{ type: string; entityId?: string } | null>(null);
   const socketRef = useRef<VoiceSocket | null>(null);
   const queueRef = useRef(new AudioQueue());
   const micRef = useRef<Mic | null>(null);
@@ -130,6 +131,7 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
       if (!acceptTurnMessage(currentGenIdRef.current, currentTurnIdRef.current, companionTurnIdRef.current, m.generationId, m.turnId)) return;
       if (currentTurnIdRef.current === null && m.turnId === lastTurnIdRef.current) return;
       applyMetadata(m.turnId, m.candidateWordIds ?? []);
+      setLastGesture(m.gesture ?? null);
     });
     sock.on('companion.reply', (m: any) => {
       if (m.error) return;
@@ -230,5 +232,5 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
     socketRef.current?.sendControl({ type: 'npc.focus', sceneId: useSceneStore.getState().sceneId, generationId: useSceneStore.getState().generationId, characterId: npcId });
   };
 
-  return { micOn, status, turns, companion, start, stop, beginUtterance, interrupt, askCompanion, requestScene, hintScene, focusNpc };
+  return { micOn, status, turns, companion, lastGesture, start, stop, beginUtterance, interrupt, askCompanion, requestScene, hintScene, focusNpc };
 }

@@ -19,4 +19,10 @@ describe('registry', () => {
     const entity: any = { id: 'x', component: 'script', layout: { x: 0, y: 0, w: 1, h: 1, anchor: 'bottom' }, appearance: { visualKey: 'a.b' }, semantics: { name: 'x' } };
     expect(renderEntity(entity)).toBeNull();
   });
+
+  it('door renders with exitId in aria-label', () => {
+    const entity: any = { id: 'door-1', component: 'door', layout: { x: 0, y: 0, w: 90, h: 200, anchor: 'bottom' }, appearance: { visualKey: 'door.wooden' }, semantics: { name: 'door', exitId: 'left', targetArchetypeId: 'bakery' } };
+    render(<div>{renderEntity(entity)}</div>);
+    expect(screen.getByRole('button', { name: /door/ })).toBeInTheDocument();
+  });
 });

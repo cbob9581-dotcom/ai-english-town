@@ -10,10 +10,13 @@ export function renderEntity(entity: Entity): JSX.Element | null {
     case 'npc':
     case 'companion':
     case 'door':
+      const label = entity.component === 'door' ? `${entity.semantics.name} (${entity.semantics.exitId ?? ''})`
+        : entity.component === 'npc' ? `${entity.semantics.name} (${entity.semantics.npcId ?? ''})`
+        : entity.semantics.name;
       return (
         <button
           type="button"
-          aria-label={entity.semantics.name}
+          aria-label={label}
           style={{
             position: 'absolute', fontSize: 'min(7vmin, 44px)', lineHeight: 1,
             background: 'transparent', border: 'none', cursor: 'pointer',

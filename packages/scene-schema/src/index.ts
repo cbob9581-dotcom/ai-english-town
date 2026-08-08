@@ -21,6 +21,10 @@ export const EntitySchema = z.object({
     name: z.string(),
     wordId: z.string().optional(),
     description: z.string().optional(),
+    // 阶段 3：door/npc 语义定位字段（API scene_store/compiler 已下发，前端 registry/SceneViewport 按此取 exitId/npcId）。
+    exitId: z.string().optional(),
+    npcId: z.string().optional(),
+    targetArchetypeId: z.string().optional(),
   }),
   interactions: z.array(z.enum(['focus', 'ask', 'inspect', 'pick'])).optional(),
 });

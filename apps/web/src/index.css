@@ -66,6 +66,9 @@ body {
   margin: 0;
 }
 
+@keyframes shimmer { 0% { transform: translateX(-30%); } 100% { transform: translateX(30%); } }
+@keyframes floaty { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+
 h1,
 h2 {
   font-family: var(--heading);
