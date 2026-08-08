@@ -2015,9 +2015,13 @@ class MockSceneDirector:
         first_concepts = {cat: catalog.concepts_in(cat)[0].concept_id
                           for s in slots for cat in s["categories"] if catalog.concepts_in(cat)}
 
+        # 槽取"第一个有候选的分类"而非 categories[0]：bakery counter.side 首分类 drink、
+        # shelf.top 首分类 container 均不在目录（categories 仅 food/paper/nature/decoration/furniture），
+        # 若用 categories[0] 会把这两个槽跳过，与 test_mock_ok_proposal_fills_every_slot（len==propSlots）矛盾。
         def _fill(slot_id: str) -> dict:
             s = next(x for x in slots if x["slotId"] == slot_id)
-            return {"slotId": slot_id, "conceptId": first_concepts[s["categories"][0]]}
+            cat = next(c for c in s["categories"] if c in first_concepts)
+            return {"slotId": slot_id, "conceptId": first_concepts[cat]}
 
         if self.scenario == "slot_mismatch":
             return {"fills": [{"slotId": "no.such.slot", "conceptId": "x"}],
@@ -2035,7 +2039,7 @@ class MockSceneDirector:
             fills = [_fill(slots[0]["slotId"])] if slots else []
             return {"fills": fills, "characters": [], "setting": {"displayName": "Partial", "time": "morning"}}
 
-        fills = [_fill(s["slotId"]) for s in slots if s["categories"][0] in first_concepts]
+        fills = [_fill(s["slotId"]) for s in slots if any(c in first_concepts for c in s["categories"])]
         chars = [{"slotId": s["slotId"], "npcId": catalog.npcs_in(s["role"])[0].npc_id} for s in npc_slots]
         return {"fills": fills, "characters": chars,
                 "setting": {"displayName": f"{archetype_id.title()} Scene", "time": "morning"}}
