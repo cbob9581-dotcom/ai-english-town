@@ -321,7 +321,7 @@ def update_score(score: float, weight: float, confidence: float) -> float:
 2. **低置信度 / 未检出**：`confidence < 0.6` → `uncertain`；目标词未检出 → `no_attempt`。二者权重 0、不进 FSRS（**不再判 error**——评审第 4 点，避免 ASR 落空反向破坏排期）。
 3. **错后重试**：error 后立即重试算一次新尝试（保留原负证据，重试结果独立入账）。
 4. **求助后成功**：求助负证据与产出正证据**都记**（help_count、成功证据照记）；FSRS 进入条件按 `scaffolded_success_count` 计，求助不直接下调排期（评审第 5 点改由日闸保守化承载「教学目标自动下调」）。
-5. **exposure 计数**：只认服务端 `lexmatch`，同一场景同一词只计一次 exposure（`exposure_count` 只加不覆盖，阈值不设——评审后不引入主 spec 未定义字段）。
+5. **exposure 计数**：只认服务端 `lexmatch`，同一场景同一词每轮最多计一次 exposure（`exposure_count += 1`；主 spec 未定义阈值，v1 不设）。
 6. **日闸**：见 §7.2。
 
 **记录顺序（单一事务）**：`engine.record_evidence()` 在引擎单写锁内、用**引擎自持连接**：
@@ -334,7 +334,7 @@ def update_score(score: float, weight: float, confidence: float) -> float:
   - 该词 ∈ `scene_words` 但 NPC 台词未命中、用户主动说出 → `spontaneous_production`（promptLevel 0）；
   - 带读/复述模式 → `repetition`（promptLevel 2）；
   - **目标词 ∈ `scene_words` 但最终 ASR 未检出 → `no_attempt`**（不判 error）；
-  - 本轮 **companion 明确纠错**该词（既有的纠错信号路径）→ `error`。
+  - 本轮 **companion 明确纠错**该词（若回合流存在纠错信号则钩之；v1 无该信号则该 source 不产生）→ `error`。
 - **实体点击**（前端 `onEntityClick` → 既有事件流）：点中实体对应的 catalog 概念词 == 目标词 → `action_understanding`。
 - **求助**（`_handle_companion_ask`）：记录 `help` 负证据（neutral）；若该词随后产出成功，产出证据照记并触发规则 4。
 - **每场选词**：`learning/scheduler.py` 产出的 `scene_words` 喂入既有 `scene_factory(scene_words, …)` 接缝（`main.py`），并记录到会话态供证据归因（`objectiveId = obj_<archetypeId>_<wordId>`）。
