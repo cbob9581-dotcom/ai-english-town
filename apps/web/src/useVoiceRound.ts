@@ -16,6 +16,14 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [companion, setCompanion] = useState<CompanionState | null>(null);
   const [lastGesture, setLastGesture] = useState<{ type: string; entityId?: string } | null>(null);
+  const [discovered, setDiscovered] = useState<Set<string>>(new Set());
+  const toggleDiscover = (id: string) => {
+    setDiscovered((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
   const socketRef = useRef<VoiceSocket | null>(null);
   const queueRef = useRef(new AudioQueue());
   const micRef = useRef<Mic | null>(null);
@@ -94,6 +102,7 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
       companionTurnIdRef.current = null;
       audioTurnIdRef.current = null;
       queueRef.current.clear();
+      setDiscovered(new Set());             // 新场景：本场景点过的实体 reset
       useSceneStore.getState().applySkeleton(m);
     });
     sock.on('scene.patch', (m: any) => {
@@ -232,5 +241,5 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
     socketRef.current?.sendControl({ type: 'npc.focus', sceneId: useSceneStore.getState().sceneId, generationId: useSceneStore.getState().generationId, characterId: npcId });
   };
 
-  return { micOn, status, turns, companion, lastGesture, start, stop, beginUtterance, interrupt, askCompanion, requestScene, hintScene, focusNpc };
+  return { micOn, status, turns, companion, lastGesture, discovered, toggleDiscover, start, stop, beginUtterance, interrupt, askCompanion, requestScene, hintScene, focusNpc };
 }

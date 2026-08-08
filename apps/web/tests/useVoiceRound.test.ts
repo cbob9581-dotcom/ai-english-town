@@ -238,4 +238,23 @@ describe('useVoiceRound scene messages', () => {
     expect(sock.sent.some((m: any) => m.type === 'scene.request' && m.exitId === 'left')).toBe(true);
     expect(sock.sent.some((m: any) => m.type === 'npc.focus' && m.characterId === 'npc_rosa')).toBe(true);
   });
+
+  it('toggleDiscover toggles per-scene discovered; scene.skeleton resets it', async () => {
+    const { result, emit } = await startHook();
+    act(() => result.current.toggleDiscover('loaf-1'));
+    expect(result.current.discovered.has('loaf-1')).toBe(true);
+    act(() => result.current.toggleDiscover('loaf-1'));
+    expect(result.current.discovered.has('loaf-1')).toBe(false);
+    act(() => result.current.toggleDiscover('loaf-1'));
+    expect(result.current.discovered.size).toBe(1);
+    // 换场景：新 skeleton → 本场景 discovered 清空（不携带旧场景的实体 id）
+    act(() => emit('scene.skeleton', {
+      type: 'scene.skeleton', sceneId: 's2', generationId: 'g2', archetypeId: 'bakery',
+      revision: 1, status: 'skeleton',
+      setting: { displayName: 'Y', time: 'day' },
+      background: { style: 'gradient', gradient: 'g', decor: [], ambienceKey: 'a' },
+      entities: [], characters: [], exits: [],
+    }));
+    expect(result.current.discovered.size).toBe(0);
+  });
 });
