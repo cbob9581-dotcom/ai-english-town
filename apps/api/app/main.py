@@ -76,6 +76,19 @@ def create_app(events: EventStore | None = None, settings: Settings | None = Non
     def archetypes() -> dict:
         return {"ids": scenes.list_archetype_ids()}
 
+    @app.get("/api/dev/archetypes")
+    def dev_archetypes() -> list[dict]:
+        out = []
+        for aid in sorted(scenes.list_archetype_ids()):
+            arche = scenes.get_archetype(aid)
+            skeleton = scenes.compile_skeleton(aid, scene_id=f"dev_{aid}", seed=f"dev_{aid}",
+                                               generation_id="dev")
+            out.append({"archetypeId": aid, "displayName": arche["displayName"],
+                        "skeleton": skeleton, "zones": arche["zones"],
+                        "propSlots": arche["propSlots"], "npcSlots": arche["npcSlots"],
+                        "exits": arche["exits"]})
+        return out
+
     @app.get("/api/scenes/{scene_id}")
     def scene(scene_id: str) -> dict:
         try:

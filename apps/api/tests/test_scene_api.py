@@ -32,3 +32,16 @@ def test_health(tmp_path: Path) -> None:
     app = create_app(EventStore(tmp_path / "events.db"))
     client = TestClient(app)
     assert client.get("/health").json()["status"] == "ok"
+
+
+def test_dev_archetypes_preview(tmp_path: Path) -> None:
+    app = create_app(EventStore(tmp_path / "events.db"))
+    client = TestClient(app)
+    r = client.get("/api/dev/archetypes")
+    assert r.status_code == 200
+    body = r.json()
+    ids = {a["archetypeId"] for a in body}
+    assert {"plaza", "bakery"} <= ids
+    plaza = next(a for a in body if a["archetypeId"] == "plaza")
+    assert plaza["skeleton"]["exits"] and len(plaza["skeleton"]["entities"]) <= 40
+    assert "zones" in plaza and "propSlots" in plaza

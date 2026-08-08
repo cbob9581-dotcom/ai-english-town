@@ -4,9 +4,12 @@ import { SceneViewport } from './SceneViewport';
 import { DialogueDock } from './DialogueDock';
 import { useVoiceRound } from './useVoiceRound';
 import { CompanionPopover } from './CompanionPopover';
+import { ArchetypePreview } from './ArchetypePreview';
 import type { Entity } from './types';
 
 export default function App() {
+  const isPreview = window.location.hash === '#/dev/archetypes';
+  if (isPreview) return <ArchetypePreview />;
   const [scene, setScene] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [focusEntity, setFocusEntity] = useState<Entity | null>(null);
