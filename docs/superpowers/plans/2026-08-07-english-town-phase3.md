@@ -2762,7 +2762,9 @@ Expected: 完成；`node_modules` 出现。
 
 - [ ] **Step 2: 写失败测试（两个门 + patch 应用）**
 
-`apps/web/tests/turnGate.test.ts` 追加：
+`apps/web/tests/turnGate.test.ts` 追加（**顶部既有 `import { isAcceptedTurn } ...` 须扩展为三函数一条 import**——
+`import { acceptSceneMessage, acceptTurnMessage, isAcceptedTurn } from '../src/audio/turnGate';`
+若顶部与追加块各导一次同名函数，vite:oxc 会因重复声明拒绝整个文件 transform）：
 ```ts
 import { acceptSceneMessage, acceptTurnMessage, isAcceptedTurn } from '../src/audio/turnGate';
 
