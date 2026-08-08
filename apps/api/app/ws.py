@@ -120,7 +120,8 @@ async def ws_session(ws: WebSocket) -> None:
                             session_id, state.scene_words,
                             result.get("npcText", ""), result.get("finalText", ""),
                             result.get("confidence", -0.5), turn_id=result["turnId"],
-                            target_word_ids=state.target_word_ids)
+                            target_word_ids=state.target_word_ids,
+                            words=result.get("words"))
                     except Exception:  # noqa: BLE001 —— 学习证据失败不杀回合
                         pass
         except asyncio.CancelledError:

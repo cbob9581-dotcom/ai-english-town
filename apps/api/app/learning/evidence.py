@@ -56,12 +56,24 @@ def apply_evidence(store, user_id: str, ev: dict, *, now: datetime) -> None:
     source, result = ev["source"], ev["result"]
     weight, axis = WEIGHTS[source]
     wid = ev["word_id"]
+    if source == "word_production":
+        # 词级置信度：只更新 asr_word_confidence_score 轴分 + 证据明细；
+        # 不计数（防与 classify_round 双重计 attempts）、不进排期（实验性，不扰动复习节奏）。
+        m = store.get_mastery(user_id, wid)
+        if m is None:
+            store.upsert_mastery(user_id, wid, updated_at=now.isoformat())
+            m = store.get_mastery(user_id, wid)
+        store.upsert_mastery(user_id, wid,
+                             asr_word_confidence_score=update_score(m["asr_word_confidence_score"], weight, ev["confidence"]),
+                             updated_at=now.isoformat())
+        return
     m = store.get_mastery(user_id, wid)
     if m is None:
         store.upsert_mastery(user_id, wid, updated_at=now.isoformat())
         m = store.get_mastery(user_id, wid)
     col = {"productive": "productive_score", "receptive": "receptive_score",
-           "asr_confidence": "asr_confidence_score"}[axis]
+           "asr_confidence": "asr_confidence_score",
+           "asr_word_confidence": "asr_word_confidence_score"}[axis]
     if result not in _NON_SCORED:
         store.upsert_mastery(user_id, wid, **{col: update_score(m[col], weight, ev["confidence"])},
                              updated_at=now.isoformat())

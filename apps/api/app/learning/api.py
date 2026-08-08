@@ -81,7 +81,8 @@ def _word_summary(req: Request, r: dict) -> dict:
             "cefr": r["cefr"], "sceneTags": _json.loads(r["scene_tags"]), "source": r["source"],
             "carrier": r["carrier"],
             "scores": {"productive": r["productive_score"], "receptive": r["receptive_score"],
-                       "asrConfidence": r["asr_confidence_score"]},
+                       "asrConfidence": r["asr_confidence_score"],
+                       "asrWordConfidence": r["asr_word_confidence_score"]},
             "fsrs": {"state": r["state"], "due": r["due"], "reps": r["reps"], "lapses": r["lapses"]},
             "evidenceCount": len(_eng(req).store.evidence_for_word("local", r["word_id"])),
             "lastEvidenceAt": None}

@@ -10,6 +10,7 @@ WEIGHTS: dict[str, tuple[float, str]] = {
     "spontaneous_production": (1.0, "productive"),
     "prompted_production": (0.65, "productive"),
     "repetition": (0.4, "asr_confidence"),
+    "word_production": (0.4, "asr_word_confidence"),
     "action_understanding": (0.55, "receptive"),
     "help": (-0.35, "productive"),
     "error": (-0.5, "productive"),

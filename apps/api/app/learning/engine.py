@@ -81,7 +81,8 @@ class LearningEngine:
 
     def record_round(self, session_id: str, scene_words: dict, npc_text: str,
                      user_text: str, confidence: float, *, turn_id: str,
-                     target_word_ids: set[str], attempt_id: str | None = None) -> int:
+                     target_word_ids: set[str], attempt_id: str | None = None,
+                     words: list[dict] | None = None) -> int:
         conf = normalize_asr_confidence(confidence) if confidence < 0 else confidence
         drafts = classify_round(scene_words, npc_text, user_text, conf,
                                 target_word_ids=target_word_ids)
@@ -101,7 +102,33 @@ class LearningEngine:
                 "created_at": now.isoformat(),
             }
             self.record_evidence(session_id, evidence, event_id=evidence["evidence_id"])
+        if words is not None:
+            self._record_word_production(session_id, scene_words, user_text, words,
+                                         drafts, turn_id, attempt_id)
         return len(drafts)
+
+    def _record_word_production(self, session_id: str, scene_words: dict, user_text: str,
+                                words: list[dict], drafts: list[dict], turn_id: str,
+                                attempt_id: str | None) -> None:
+        from app.learning.word_confidence import score_word_confidence
+        draft_ids = {d["word_id"] for d in drafts}
+        now = datetime.now(timezone.utc)
+        for wid, score in score_word_confidence(words, scene_words, user_text).items():
+            if wid not in draft_ids:
+                continue
+            evidence = {
+                "evidence_id": f"ev_{uuid.uuid4().hex[:12]}",
+                "event_seq": 0, "session_id": session_id,
+                "attempt_id": attempt_id or f"attempt_{turn_id}",
+                "turn_id": turn_id,
+                "objective_id": f"obj_scene_{wid}",
+                "word_id": wid, "source": "word_production", "prompt_level": 0,
+                "axis": "asr_word_confidence", "result": "success", "confidence": score,
+                "evidence_policy_version": self.settings.evidence_policy_version,
+                "fsrs_algorithm_version": self.settings.fsrs_algorithm_version,
+                "created_at": now.isoformat(),
+            }
+            self.record_evidence(session_id, evidence, event_id=evidence["evidence_id"])
 
 
 def _internal_payload(evidence: dict) -> dict:

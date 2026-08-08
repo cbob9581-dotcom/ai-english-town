@@ -39,7 +39,7 @@ async def run_round(
     if not final_text:
         state.active_turn_id = None
         return {"finalText": "", "turnId": turn_id, "replied": False,
-                "npcText": "", "confidence": conf}
+                "npcText": "", "confidence": conf, "words": asr_result.get("words")}
 
     committed = False
     audio_bytes = 0
@@ -80,7 +80,8 @@ async def run_round(
                 await ws_send(msg)
         state.active_turn_id = None
         return {"finalText": final_text, "turnId": turn_id, "replied": True,
-                "npcText": accumulated.strip(), "confidence": conf}
+                "npcText": accumulated.strip(), "confidence": conf,
+                "words": asr_result.get("words")}
     except asyncio.CancelledError:
         # 未 commit 就被打断 → 补写部分轮次（用户输入 + 已产生的 npcText），保持证据不丢
         if not committed:

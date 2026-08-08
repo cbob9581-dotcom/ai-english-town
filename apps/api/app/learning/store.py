@@ -250,7 +250,8 @@ class LearningStore:
             "       COALESCE(ms.state, 'new') AS state, ms.due, ms.stability, ms.difficulty, ms.reps, ms.lapses, "
             "       COALESCE(ms.productive_score, 0.0) AS productive_score, "
             "       COALESCE(ms.receptive_score, 0.0) AS receptive_score, "
-            "       COALESCE(ms.asr_confidence_score, 0.0) AS asr_confidence_score "
+            "       COALESCE(ms.asr_confidence_score, 0.0) AS asr_confidence_score, "
+            "       COALESCE(ms.asr_word_confidence_score, 0.0) AS asr_word_confidence_score "
             "FROM learning_items li "
             "LEFT JOIN mastery_states ms ON ms.user_id = li.user_id AND ms.word_id = li.word_id "
             "WHERE li.user_id=? ORDER BY li.created_at", (user_id,)).fetchall()
