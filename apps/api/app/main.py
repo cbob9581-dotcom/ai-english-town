@@ -32,6 +32,17 @@ def create_app(events: EventStore | None = None, settings: Settings | None = Non
     asr_impl = asr_client or (lambda audio: worker_asr(audio, f"{ASR_URL}/transcribe"))
     tts_impl = tts_client or (lambda text: worker_tts(text, TTS_BASE))
 
+    from app.learning.api import router as learning_router
+    from app.learning.dictionary import Dictionary
+    from app.learning.engine import LearningEngine
+    from app.learning.store import LearningStore
+    from app.llm import concepts
+
+    store = LearningStore(events.connection)
+    dictionary = Dictionary.load(settings.asset_root)
+    engine = LearningEngine(store, events, settings)
+    concepts.configure_word_resolver(store.resolve_word_id_from_store)
+
     def scene_factory(scene_words: dict, entity_by_word_id: dict, npc_id: str | None = None) -> NpcActor:
         persona = (
             "You are a friendly helper in a small English town. Reply in short, simple English "
@@ -51,12 +62,20 @@ def create_app(events: EventStore | None = None, settings: Settings | None = Non
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        try:
+            n = app.state.learning.drain_outbox()
+            if n:
+                print(f"learning: drained {n} outbox entries")
+        except Exception:  # noqa: BLE001 —— 启动补账失败不阻断
+            pass
         yield
         await client.aclose()
 
     app = FastAPI(title="english-town-api", version="0.2.0", lifespan=lifespan)
     app.state.events = events
     app.state.settings = settings
+    app.state.learning = engine
+    app.state.dictionary = dictionary
     app.state.scenes = scenes
     app.state.catalog = catalog
     app.state.scene_factory = scene_factory
@@ -72,6 +91,7 @@ def create_app(events: EventStore | None = None, settings: Settings | None = Non
 
     from app.ws import router as ws_router
     app.include_router(ws_router)
+    app.include_router(learning_router)
 
     @app.get("/health")
     def health() -> dict:

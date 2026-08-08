@@ -33,9 +33,12 @@ class Settings:
     llm_concurrency_limit: int = 2
     tutor_cache_dir: Path = Path("data/tutor-audio")
 
-    # --- 阶段 4：学习证据版本（learning 引擎写入 evidence 时落库的版本号）---
+    # --- 阶段 4：学习引擎 ---
     evidence_policy_version: str = "v1"
     fsrs_algorithm_version: str = "fsrs-5"
+    score_alpha: float = 0.35
+    fsrs_retention: float = 0.9
+    fsrs_min_confidence: float = 0.6
 
     _ENV_FIELDS = {
         "llm_base_url": "LLM_BASE_URL",
@@ -59,6 +62,11 @@ class Settings:
         "llm_session_call_cap": "LLM_SESSION_CALL_CAP",
         "llm_concurrency_limit": "LLM_CONCURRENCY_LIMIT",
         "tutor_cache_dir": "TUTOR_CACHE_DIR",
+        "evidence_policy_version": "EVIDENCE_POLICY_VERSION",
+        "fsrs_algorithm_version": "FSRS_ALGORITHM_VERSION",
+        "score_alpha": "SCORE_ALPHA",
+        "fsrs_retention": "FSRS_RETENTION",
+        "fsrs_min_confidence": "FSRS_MIN_CONFIDENCE",
     }
 
     @classmethod

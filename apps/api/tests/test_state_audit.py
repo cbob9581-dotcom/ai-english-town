@@ -1,5 +1,5 @@
-"""写实断言：任何合法操作只允许 3 张表变化（session_events / llm_calls / tutor_cache）。
-对未来新增表（如 mastery_states）越权写入会立刻失败。"""
+"""写实断言：任何合法操作只允许变化落在白名单表内（会话/LLM/缓存 + 阶段 4 学习表）。
+主流程回合默认不命中目标词 → 只写 spontaneous 表；越权写入白名单外会立刻失败。"""
 from __future__ import annotations
 
 import asyncio
@@ -11,7 +11,10 @@ from app.event_store import EventStore
 from app.ws import ws_session
 from tests.ws_helpers import FakeWS, audio_end, audio_frame, audio_start, make_app
 
-ALLOWED_TABLES = {"session_events", "llm_calls", "tutor_cache"}
+ALLOWED_TABLES = {"session_events", "llm_calls", "tutor_cache",
+                  "word_lists", "learning_items", "mastery_states",
+                  "evidence_events", "spontaneous_encounters", "spontaneous_words",
+                  "evidence_outbox"}
 
 
 def _snapshot(events: EventStore) -> dict[str, tuple[int, str]]:
@@ -50,5 +53,6 @@ async def test_full_round_only_touches_allowed_tables(tmp_path) -> None:
         st.round_task.cancel()
 
     changed = _changed(before, _snapshot(events))
+    # 合法回合可动学习表，但不强制全动（取决于是否命中目标词）——subset 断言保留「不越权」核心
     assert changed <= ALLOWED_TABLES, f"越权写入了表: {changed - ALLOWED_TABLES}"
-    assert changed == ALLOWED_TABLES   # 一个合法回合确实动了这三张（含 tutor 缓存）
+    assert changed >= {"session_events", "llm_calls", "tutor_cache"}  # 核心三张确实被回合触及
