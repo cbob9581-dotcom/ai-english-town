@@ -10,7 +10,8 @@ import uuid
 from fastapi import APIRouter, WebSocket
 
 from app.arbitration import ArbitrationState
-from app.scene_lifecycle import enter_scene, scene_maps
+from app.scene_lifecycle import enter_scene, fill_scene, scene_maps
+from app.scene_prefetch import ScenePrefetchCache  # noqa: F401
 from app.llm.concepts import resolve_word_id  # noqa: F401
 from app.settings import Settings
 from app.voice_round import run_round
@@ -159,6 +160,31 @@ async def ws_session(ws: WebSocket) -> None:
             return  # in-flight 合并：连点同一实体不放大调用
         state.pending_asks[word_id] = asyncio.create_task(_run_tutor())
 
+    async def _prefetch_for(app, state, session_id: str, archetype_id: str) -> None:
+        """预算允许时后台预取目标 archetype 的提案并缓存。"""
+        settings = app.state.settings
+        cap = settings.llm_session_call_cap
+        if app.state.llm_log.count_session_calls(session_id) >= cap * settings.scene_prefetch_budget_ratio:
+            return
+        if app.state.prefetch.get(archetype_id) is not None:
+            return
+        try:
+            async with state.semaphore:
+                async with asyncio.timeout(settings.llm_total_timeout_director_s):
+                    proposal = await app.state.director.propose(
+                        archetype_id=archetype_id,
+                        archetype=app.state.scenes.get_archetype(archetype_id),
+                        catalog=app.state.catalog,
+                        recent_scenes=[], attempt="prefetch")
+            app.state.prefetch.put(archetype_id, proposal)
+        except Exception:  # noqa: BLE001 —— 预取失败（含超时）静默（下次正常进场再 Director）
+            return
+
+    def _maybe_spawn_prefetch(app, state, session_id: str, archetype_id: str) -> None:
+        task = asyncio.create_task(_prefetch_for(app, state, session_id, archetype_id))
+        state.spurious_guards.add(task)
+        task.add_done_callback(state.spurious_guards.discard)
+
     try:
         while True:
             msg = await ws.receive()
@@ -197,9 +223,14 @@ async def ws_session(ws: WebSocket) -> None:
                     if target:
                         await enter_scene(app, events, state, session_id, send,
                                           target_archetype_id=target, source="exit")
+                        _maybe_spawn_prefetch(app, state, session_id,
+                                              app.state.scenes.load_town_map()["start"])
                 elif t == "scene.hint":
-                    # Task 7 实现预取；本任务仅解析（保证协议字段不抛）
-                    pass
+                    if state.scene is None:
+                        continue
+                    target = app.state.scenes.target_for(state.scene.archetype_id, ctrl.get("exitId"))
+                    if target:
+                        _maybe_spawn_prefetch(app, state, session_id, target)
             else:
                 raw = msg.get("bytes")
                 if raw:

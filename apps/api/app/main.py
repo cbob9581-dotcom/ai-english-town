@@ -10,6 +10,7 @@ from app.llm.scene_director import get_scene_director
 from app.llm.tutor import CompanionTutor
 from app.llm.tutor_cache import TutorCache
 from app.llm_log import LlmLog
+from app.scene_prefetch import ScenePrefetchCache
 from app.scene_store import SceneStore
 from app.scripted_npc import reply as scripted_reply
 from app.settings import Settings
@@ -63,6 +64,7 @@ def create_app(events: EventStore | None = None, settings: Settings | None = Non
     app.state.actor = actor
     app.state.tutor = tutor
     app.state.director = get_scene_director(settings, client, llm_log)
+    app.state.prefetch = ScenePrefetchCache(ttl_s=settings.scene_prefetch_ttl_s)
     app.state.asr_client = asr_impl
     app.state.tts_client = tts_impl
     app.state.sessions = {}

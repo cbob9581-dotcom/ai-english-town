@@ -119,6 +119,12 @@ async def fill_scene(app, events, state, session_id, send, *,
         if calls >= app.state.settings.llm_session_call_cap:
             await _degrade(app, events, state, session_id, send, scene_id, generation_id, "budget")
             return
+        cached = app.state.prefetch.get(archetype_id)
+        if cached is not None:
+            await _apply_proposal(app, events, state, session_id, send, scene_id=scene_id,
+                                  seed=seed, generation_id=generation_id, skeleton=skeleton,
+                                  proposal=cached)
+            return
         async with state.semaphore:
             # Director 总超时（含 Mock timeout 场景）：由下方 except TimeoutError 接 → _degrade
             async with asyncio.timeout(app.state.settings.llm_total_timeout_director_s):
@@ -129,6 +135,7 @@ async def fill_scene(app, events, state, session_id, send, *,
                     recent_scenes=recent_scenes(events, session_id),
                     attempt="enter")
         cleaned, _warnings = validate_proposal(proposal, scenes.get_archetype(archetype_id), app.state.catalog)
+        app.state.prefetch.put(archetype_id, cleaned)      # 供下次访问（进入即命中）
         filled = scenes.compile_filled(archetype_id, scene_id=scene_id, seed=seed,
                                        generation_id=generation_id, proposal=cleaned)
         ops = scenes.diff_scenes(skeleton, filled)
@@ -169,3 +176,36 @@ async def _degrade(app, events, state, session_id, send, scene_id, generation_id
     })
     await send({"type": "scene.degraded", "sceneId": scene_id,
                 "generationId": generation_id, "reason": reason, "fallbackReason": reason})
+
+
+async def _apply_proposal(app, events, state, session_id, send, *,
+                          scene_id, seed, generation_id, skeleton, proposal) -> None:
+    """预取命中的提案直接应用（无 Director 调用、无 llm_calls 记录）。"""
+    scenes = app.state.scenes
+    archetype_id = state.scene.archetype_id
+    try:
+        cleaned, _warnings = validate_proposal(proposal, scenes.get_archetype(archetype_id), app.state.catalog)
+        filled = scenes.compile_filled(archetype_id, scene_id=scene_id, seed=seed,
+                                       generation_id=generation_id, proposal=cleaned)
+        ops = scenes.diff_scenes(skeleton, filled)
+        if state.scene is None or state.scene.scene_id != scene_id:
+            return
+        state.scene.status = "filled"
+        state.scene.setting = filled["setting"]
+        state.scene.entities = filled["entities"]
+        state.scene.characters = filled["characters"]
+        state.scene.exits = filled["exits"]
+        state.scene.revision += 1
+        patch_id = f"patch_{uuid.uuid4().hex[:8]}"
+        events.append(session_id, "scene.patch", {
+            "sceneId": scene_id, "generationId": generation_id,
+            "baseRevision": state.scene.revision - 1, "patchId": patch_id, "ops": ops,
+        })
+        if ops:
+            await send({"type": "scene.patch", "sceneId": scene_id, "generationId": generation_id,
+                        "baseRevision": state.scene.revision - 1, "patchId": patch_id, "ops": ops})
+    except (ProposalError, Exception):  # noqa: BLE001 —— 缓存提案异常时回退到 Director 填充
+        # 先失效缓存条目：否则 fill_scene 重读同一坏提案 → _apply_proposal → 无限递归
+        app.state.prefetch.invalidate(archetype_id)
+        await fill_scene(app, events, state, session_id, send, scene_id=scene_id,
+                         seed=seed, generation_id=generation_id, skeleton=skeleton)
