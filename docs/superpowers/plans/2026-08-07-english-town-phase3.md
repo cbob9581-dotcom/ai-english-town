@@ -3313,7 +3313,7 @@ from app.llm.gesture import derive_gesture, validate_gesture
             msg["gesture"] = gesture
         return msg
 ```
-把 stream_reply ok 路径与 `_degrade` 里的 metadata 构造替换为 `self._metadata(...)`（_degrade 用空文本 → gesture None，行为不变）。
+把 stream_reply ok 路径与 `_degrade` 里的 metadata 构造替换为 `self._metadata(...)`（`_degrade` 传降级文本；降级文本也可能派生 gesture——如 fallback "Sorry..." 含 "sorry" → shake，与 scripted fallback 的 gesture 一致；若严格要求降级无 gesture 则传 `full=""`）。
 
 ```python
 # apps/api/tests/test_npc_actor.py 追加（构造带 entity_by_word_id）
