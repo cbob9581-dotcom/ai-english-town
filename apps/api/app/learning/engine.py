@@ -34,10 +34,18 @@ class LearningEngine:
     def record_evidence(self, session_id: str, evidence: dict,
                         *, event_id: str | None = None) -> int | None:
         """单事务：session_events(evidence, internal) + evidence_events + mastery_states。
-        复用 event_store 的锁与连接（sequence 分配同锁）。失败 → outbox，不阻断回合。"""
+        复用 event_store 的锁与连接（sequence 分配同锁）。失败 → outbox，不阻断回合。
+        event_id 级去重：同 event_id 重复提交 → 直接返回既有 seq，不 append、不 apply_evidence
+        （兑现「不重复计算」约束；锁内单写者，无 TOCTOU）。"""
         with self.events.write_lock:
             conn = self.events.connection
             try:
+                if event_id is not None:
+                    existing = conn.execute(
+                        "SELECT sequence FROM session_events WHERE event_id = ?",
+                        (event_id,)).fetchone()
+                    if existing is not None:
+                        return existing[0]      # 重复提交：不重复计算
                 seq = self.events.append_in_tx(conn, session_id, "evidence",
                                                _internal_payload(evidence),
                                                event_id=event_id, internal=True)

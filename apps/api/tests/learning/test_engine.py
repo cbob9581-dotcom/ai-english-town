@@ -55,3 +55,22 @@ def test_outbox_on_failure(tmp_path) -> None:
     rows = eng.store.outbox_drain(U)
     assert len(rows) == 1
     assert json.loads(rows[0])["evidence_id"] == "ev_bad"
+
+
+def test_record_evidence_same_event_id_dedup(tmp_path) -> None:
+    eng, events = _engine(tmp_path)
+    eng.store.import_words(U, "l1", "x", [{"lemma": "loaf", "pos": "n", "sense": "1",
+                                            "scene_tags": "[\"bakery\"]", "carrier": "phrase",
+                                            "slot_categories": "[]", "source": "quest",
+                                            "created_at": NOW.isoformat()}])
+    base = {"event_seq": 0, "session_id": "s1", "attempt_id": "a1", "turn_id": "t1",
+            "objective_id": None, "word_id": "word_loaf_n_1", "source": "prompted_production",
+            "prompt_level": 1, "axis": "productive", "result": "success", "confidence": 0.86,
+            "evidence_policy_version": "v1", "fsrs_algorithm_version": "fsrs-5",
+            "created_at": NOW.isoformat()}
+    seq1 = eng.record_evidence("s1", {**base, "evidence_id": "ev_a"}, event_id="ev_help_loaf_n_1_2026-08-08")
+    seq2 = eng.record_evidence("s1", {**base, "evidence_id": "ev_b"}, event_id="ev_help_loaf_n_1_2026-08-08")
+    assert seq1 == seq2 and seq1 is not None
+    assert len(eng.store.evidence_for_word(U, "word_loaf_n_1")) == 1   # 第二次 no-op
+    m = eng.store.get_mastery(U, "word_loaf_n_1")
+    assert m["attempts"] == 1 and m["exposure_count"] == 1             # 不双算
