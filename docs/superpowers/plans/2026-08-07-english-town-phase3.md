@@ -3751,6 +3751,8 @@ git commit -m "feat(web): archetype-driven viewport + exits + hover hint + gestu
   {"conceptId": "concept.deco.sign", "name": "sign", "lemma": "sign", "pos": "n", "visualKey": "decor.sign"}
 ]
 ```
+> **合并顺序约束（Task 13 修正，实测 sha1 验证）**：该块与既有 `decoration` 分类（含 fountain，Task 2 已建）合并后，数组最终顺序必须为 `[flower, duck, fountain, sign]`——即 fountain 位于 **index 2**。原因：plaza 骨架 `fountain.center` 槽默认填充走 `SceneStore._default_concept` 的 `_stable_index(key, n) = sha1(key).digest()[0] % n`（apps/api/app/scene_store.py:18-19,66-71），`key="fountain.center:scene_plaza_1"` 的 `sha1(...)[0]=118`，分类由 1→4 项后 `118 % 4 = 2` 选中 index 2；fountain 不在 index 2 则 `test_companion`（断言 "fountain" 词）红。其余新原型 slot 无既有断言，顺序自由。
+```
 
 - [ ] **Step 3: icon-map 同步扩展**
 
