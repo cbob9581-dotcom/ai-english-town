@@ -249,6 +249,7 @@ def rebuild_from_events(app, events, state, session_id, send) -> bool:
     state.scene_seq = int(last["sceneId"].rsplit("_", 1)[-1])
     state.arbitration.reset(scene.default_npc_id)
     scene_words, entity_by_word_id = scene_maps(scene)
+    state.scene_words = scene_words
     state.actor = app.state.scene_factory(scene_words, entity_by_word_id, npc_id=scene.default_npc_id)
 
     async def _send_sync() -> None:
