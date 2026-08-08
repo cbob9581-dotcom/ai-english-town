@@ -80,13 +80,17 @@ async def enter_scene(app, events, state, session_id, send, *,
 
 
 async def _cancel_work(app, events, state, session_id) -> None:
-    """取消旧回合/填充任务；写 interrupted（若回合未 commit）；清 pending companion。"""
+    """取消旧回合/填充任务；清 active_turn_id/is_playing（防虚假 interrupted）；清 pending companion。
+    不写 interrupted（转场不是"打断回合"语义）；未 commit 回合的证据由 run_round 的
+    CancelledError 分支补写 partial turn（voice_round.py:80-87）。"""
     if state.round_task and not state.round_task.done():
         state.round_task.cancel()
         try:
             await state.round_task
         except asyncio.CancelledError:
             pass
+    state.active_turn_id = None
+    state.is_playing = False
     if state.fill_task and not state.fill_task.done():
         state.fill_task.cancel()
         try:
