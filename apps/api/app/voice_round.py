@@ -27,6 +27,7 @@ async def run_round(
     state,  # SessionState（Task 7 定义）
     *,
     budget_exceeded: bool = False,
+    world_summary: dict | None = None,
 ) -> dict:
     turn_id = state.new_turn_id()
     state.active_turn_id = turn_id
@@ -49,7 +50,7 @@ async def run_round(
                 session_id=session_id, generation_id=state.generation_id, turn_id=turn_id,
                 utterance_id=utterance_id, user_text=final_text,
                 recent_turns=build_history(events, session_id),
-                budget_exceeded=budget_exceeded):
+                budget_exceeded=budget_exceeded, world_summary=world_summary):
             mtype = msg["type"]
             if mtype == "npc.speech.delta":
                 accumulated += msg["text"] + " "

@@ -9,6 +9,7 @@ from typing import Protocol
 
 from openai import APIStatusError
 
+from app.learning.memory import format_world_summary
 from app.llm.client import JsonParseError, LLMAdapter, LLMConnectError
 from app.settings import Settings
 
@@ -26,7 +27,8 @@ _DIRECTOR_SYSTEM = (
 
 class SceneDirector(Protocol):
     async def propose(self, *, archetype_id: str, archetype: dict, catalog,
-                      recent_scenes: list[str], attempt: str = "enter") -> dict: ...
+                      recent_scenes: list[str], world_summary: dict | None = None,
+                      attempt: str = "enter") -> dict: ...
 
 
 class LlmSceneDirector:
@@ -35,7 +37,8 @@ class LlmSceneDirector:
         self._settings = settings
         self._llm_log = llm_log
 
-    def _build_messages(self, archetype: dict, catalog, recent_scenes: list[str]) -> list[dict]:
+    def _build_messages(self, archetype: dict, catalog, recent_scenes: list[str],
+                        world_summary: dict | None = None) -> list[dict]:
         slots = []
         for s in archetype["propSlots"]:
             slots.append({"slotId": s["slotId"], "zone": s["zone"],
@@ -49,15 +52,19 @@ class LlmSceneDirector:
                    "displayName": archetype["displayName"],
                    "propSlots": slots, "npcSlots": npc_slots,
                    "recentScenes": recent_scenes}
+        block = format_world_summary(world_summary)
+        if block:
+            payload["worldSummary"] = block
         return [
             {"role": "system", "content": _DIRECTOR_SYSTEM},
             {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
         ]
 
     async def propose(self, *, archetype_id: str, archetype: dict, catalog,
-                      recent_scenes: list[str], attempt: str = "enter") -> dict:
+                      recent_scenes: list[str], world_summary: dict | None = None,
+                      attempt: str = "enter") -> dict:
         t0 = time.perf_counter()
-        messages = self._build_messages(archetype, catalog, recent_scenes)
+        messages = self._build_messages(archetype, catalog, recent_scenes, world_summary)
         try:
             async with asyncio.timeout(self._settings.llm_total_timeout_director_s):
                 res = await self._client.complete_json(

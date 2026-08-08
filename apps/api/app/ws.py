@@ -105,11 +105,14 @@ async def ws_session(ws: WebSocket) -> None:
 
     async def _run_round(payload: bytes, utterance_id: str) -> None:
         budget_exceeded = app.state.llm_log.count_session_calls(session_id) >= settings.llm_session_call_cap
+        mem = getattr(app.state, "memory", None)
+        world_summary = mem.get_world_summary("local") if mem else None
         try:
             async with state.semaphore:
                 result = await run_round(session_id, utterance_id, payload, events,
                                          app.state.asr_client, app.state.tts_client, send,
-                                         state.actor, state, budget_exceeded=budget_exceeded)
+                                         state.actor, state, budget_exceeded=budget_exceeded,
+                                         world_summary=world_summary)
                 learning = getattr(app.state, "learning", None)
                 if learning and result.get("replied") and state.scene is not None:
                     try:
@@ -254,7 +257,10 @@ async def ws_session(ws: WebSocket) -> None:
         cap = settings.llm_session_call_cap
         if app.state.llm_log.count_session_calls(session_id) >= cap * settings.scene_prefetch_budget_ratio:
             return
-        if app.state.prefetch.get(archetype_id) is not None:
+        mem = getattr(app.state, "memory", None)
+        revision = mem.get_revision("local") if mem else 0
+        world_summary = mem.get_world_summary("local") if mem else None
+        if app.state.prefetch.get(archetype_id, revision) is not None:
             return
         try:
             async with state.semaphore:
@@ -263,8 +269,8 @@ async def ws_session(ws: WebSocket) -> None:
                         archetype_id=archetype_id,
                         archetype=app.state.scenes.get_archetype(archetype_id),
                         catalog=app.state.catalog,
-                        recent_scenes=[], attempt="prefetch")
-            app.state.prefetch.put(archetype_id, proposal)
+                        recent_scenes=[], world_summary=world_summary, attempt="prefetch")
+            app.state.prefetch.put(archetype_id, revision, proposal)
         except Exception:  # noqa: BLE001 —— 预取失败（含超时）静默（下次正常进场再 Director）
             return
 

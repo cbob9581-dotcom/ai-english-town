@@ -111,7 +111,8 @@ class MockSceneDirector:
         self.scenario = scenario
 
     async def propose(self, *, archetype_id: str, archetype: dict, catalog,
-                      recent_scenes: list[str], attempt: str = "enter") -> dict:
+                      recent_scenes: list[str], world_summary: dict | None = None,
+                      attempt: str = "enter") -> dict:
         if self.scenario == "timeout":
             await asyncio.sleep(60)                       # 外层 director timeout 取消它
         if self.scenario == "connect_error":

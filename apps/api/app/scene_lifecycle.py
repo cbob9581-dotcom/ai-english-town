@@ -139,7 +139,9 @@ async def fill_scene(app, events, state, session_id, send, *,
         if calls >= app.state.settings.llm_session_call_cap:
             await _degrade(app, events, state, session_id, send, scene_id, generation_id, "budget")
             return
-        cached = app.state.prefetch.get(archetype_id)
+        mem = getattr(app.state, "memory", None)
+        revision = mem.get_revision("local") if mem else 0
+        cached = app.state.prefetch.get(archetype_id, revision)
         if cached is not None:
             await _apply_proposal(app, events, state, session_id, send, scene_id=scene_id,
                                   seed=seed, generation_id=generation_id, skeleton=skeleton,
@@ -153,9 +155,10 @@ async def fill_scene(app, events, state, session_id, send, *,
                     archetype=scenes.get_archetype(archetype_id),
                     catalog=app.state.catalog,
                     recent_scenes=recent_scenes(events, session_id),
+                    world_summary=mem.get_world_summary("local") if mem else None,
                     attempt="enter")
         cleaned, _warnings = validate_proposal(proposal, scenes.get_archetype(archetype_id), app.state.catalog)
-        app.state.prefetch.put(archetype_id, cleaned)      # 供下次访问（进入即命中）
+        app.state.prefetch.put(archetype_id, revision, cleaned)      # 供下次访问（进入即命中）
         filled = scenes.compile_filled(archetype_id, scene_id=scene_id, seed=seed,
                                        generation_id=generation_id, proposal=cleaned)
         ops = scenes.diff_scenes(skeleton, filled)

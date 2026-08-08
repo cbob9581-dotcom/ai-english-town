@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator, Callable, Iterator
 
 from openai import APIStatusError
 
+from app.learning.memory import format_world_summary
 from app.llm.chunker import SentenceChunker
 from app.llm.client import LLMAdapter, LLMConnectError
 from app.llm.gesture import derive_gesture, validate_gesture
@@ -75,12 +76,16 @@ class NpcActor:
     def _scene_hint(self) -> str:
         return "Items nearby: " + ", ".join(self._allowed_words.values())
 
-    def _build_messages(self, user_text: str, recent_turns: list[dict]) -> list[dict]:
+    def _build_messages(self, user_text: str, recent_turns: list[dict],
+                        world_summary: dict | None = None) -> list[dict]:
         user_payload = {
             "transcript": user_text,
             "recent_turns": recent_turns,
             "scene": self._scene_hint(),
         }
+        block = format_world_summary(world_summary)
+        if block:
+            user_payload["worldSummary"] = block
         return [
             {"role": "system", "content": self._persona},
             {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
@@ -108,7 +113,8 @@ class NpcActor:
 
     async def stream_reply(self, *, session_id: str, generation_id: str, turn_id: str,
                            utterance_id: str, user_text: str, recent_turns: list[dict],
-                           budget_exceeded: bool = False) -> AsyncIterator[dict]:
+                           budget_exceeded: bool = False,
+                           world_summary: dict | None = None) -> AsyncIterator[dict]:
         t0 = time.perf_counter()
         ttft_ms: int | None = None
         tokens: dict | None = None
@@ -117,7 +123,7 @@ class NpcActor:
         chunker = SentenceChunker()
         emitted_chars = 0
         sentences: list[str] = []
-        messages = self._build_messages(user_text, recent_turns)
+        messages = self._build_messages(user_text, recent_turns, world_summary)
 
         try:
             if budget_exceeded:

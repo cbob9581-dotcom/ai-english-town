@@ -11,6 +11,7 @@ from typing import Awaitable, Callable
 
 from openai import APIStatusError
 
+from app.learning.memory import format_world_summary
 from app.llm.client import JsonParseError, LLMAdapter, LLMConnectError
 from app.llm.proposals import ProposalError, validate_tutor
 from app.llm.tutor_cache import TutorCache
@@ -60,7 +61,8 @@ class CompanionTutor:
         return tts["audioBase64"], int(tts["sampleRate"])
 
     async def reply(self, *, session_id: str, generation_id: str,
-                    word_id: str, word: str) -> TutorResult:
+                    word_id: str, word: str,
+                    world_summary: dict | None = None) -> TutorResult:
         cached = self._cache.get(word_id)
         if cached is not None and cached.get("audio_path"):
             try:
@@ -76,9 +78,13 @@ class CompanionTutor:
         error: str | None = None
         scaffold = ""
         try:
+            user = {"word": word}
+            block = format_world_summary(world_summary)
+            if block:
+                user["worldSummary"] = block
             messages = [
                 {"role": "system", "content": TUTOR_SYSTEM_PROMPT.format(max_scaffold_chars=self._settings.llm_max_scaffold_chars)},
-                {"role": "user", "content": json.dumps({"word": word})},
+                {"role": "user", "content": json.dumps(user, ensure_ascii=False)},
             ]
             async with asyncio.timeout(self._settings.llm_total_timeout_tutor_s):
                 res = await self._client.complete_json(
