@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 
 import numpy as np
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
 from asr_worker.streaming import RollingTranscriber, UtteranceState
-from asr_worker.whisper_engine import WhisperEngine
+from asr_worker.whisper_engine import WhisperEngine, word_timestamps_active
 
 app = FastAPI(title="asr-worker")
 ENGINE: WhisperEngine | None = None
@@ -16,7 +17,11 @@ ENGINE: WhisperEngine | None = None
 @app.on_event("startup")
 def _load() -> None:
     global ENGINE
-    ENGINE = WhisperEngine.load("auto")
+    ENGINE = WhisperEngine.load("auto", model=os.environ.get("ASR_MODEL"))
+    ENGINE.word_timestamps_enabled = word_timestamps_active(
+        ENGINE,
+        os.environ.get("ENABLE_WORD_TIMESTAMPS", "").lower() == "true",
+        os.environ.get("WORD_TIMESTAMP_MIN_MODEL", "whisper-large-v3"))
 
 
 @app.websocket("/ws/asr")
@@ -24,7 +29,7 @@ async def ws_asr(ws: WebSocket) -> None:
     await ws.accept()
     utterance: UtteranceState | None = None
     samples: list[float] = []
-    rt = RollingTranscriber(ENGINE.transcribe)  # type: ignore[arg-type]
+    rt = RollingTranscriber(ENGINE.transcribe, word_timestamps=getattr(ENGINE, "word_timestamps_enabled", False))  # type: ignore[arg-type]
     try:
         while True:
             msg = await ws.receive()
@@ -68,4 +73,4 @@ async def transcribe(req: "TranscribeRequest") -> dict:
 # 模块级共享状态：让 /transcribe 与 WS 复用同一 transcriber 逻辑
 def rt_finalize(samples) -> dict:
     u = UtteranceState("one-shot")
-    return RollingTranscriber(ENGINE.transcribe).finalize(u, samples, 16000)  # type: ignore[union-attr]
+    return RollingTranscriber(ENGINE.transcribe, word_timestamps=getattr(ENGINE, "word_timestamps_enabled", False)).finalize(u, samples, 16000)  # type: ignore[union-attr]

@@ -1,11 +1,12 @@
 """启动自检：GPU/CUDA/模型加载/3 秒转写/峰值显存与耗时。"""
 from __future__ import annotations
 
+import os
 import time
 
 import numpy as np
 
-from asr_worker.whisper_engine import WhisperEngine
+from asr_worker.whisper_engine import WhisperEngine, word_timestamps_active
 
 
 def _nvidia_gpu() -> str:
@@ -48,7 +49,11 @@ def run(wav_path: str | None = None) -> dict:
         transcribe_secs = time.perf_counter() - t0
     except Exception as e:  # noqa: BLE001
         return {"gpu_name": _nvidia_gpu(), "cuda_ok": engine.device == "cuda", "load_secs": load_secs, "peak_vram_mib": -1, "transcribe_ok": False, "transcribe_secs": -1.0, "device": engine.device, "error": str(e)}
-    return {"gpu_name": _nvidia_gpu(), "cuda_ok": engine.device == "cuda", "load_secs": round(load_secs, 2), "peak_vram_mib": _peak_vram(), "transcribe_ok": transcribe_ok, "transcribe_secs": round(transcribe_secs, 3), "device": engine.device, "sample": result["text"]}
+    return {"gpu_name": _nvidia_gpu(), "cuda_ok": engine.device == "cuda", "load_secs": round(load_secs, 2), "peak_vram_mib": _peak_vram(), "transcribe_ok": transcribe_ok, "transcribe_secs": round(transcribe_secs, 3), "device": engine.device, "sample": result["text"],
+            "word_timestamps": word_timestamps_active(
+                engine,
+                os.environ.get("ENABLE_WORD_TIMESTAMPS", "").lower() == "true",
+                os.environ.get("WORD_TIMESTAMP_MIN_MODEL", "whisper-large-v3"))}
 
 
 def _peak_vram() -> int:

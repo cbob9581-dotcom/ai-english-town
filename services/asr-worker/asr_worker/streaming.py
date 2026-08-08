@@ -29,10 +29,12 @@ def merge_windows(previous: str, current: str) -> str:
 class RollingTranscriber:
     """stable 语义：相邻两次转写的公共前缀（"连续两次一致"的 token）。
     只对 stable 变化发 partial，final 覆盖 partial。"""
-    def __init__(self, transcribe_fn, window_s: float = 6.0, check_ms: float = 300.0) -> None:
+    def __init__(self, transcribe_fn, window_s: float = 6.0, check_ms: float = 300.0,
+                 word_timestamps: bool = False) -> None:
         self.transcribe_fn = transcribe_fn
         self.window_s = window_s
         self.check_ms = check_ms
+        self.word_timestamps = word_timestamps
         self.last_check_ms = -1.0
         self.last_text = ""
         self.emitted_stable = ""
@@ -58,14 +60,17 @@ class RollingTranscriber:
         return []
 
     def finalize(self, utterance: UtteranceState, samples: object, sample_rate: int) -> dict:
-        result = self.transcribe_fn(samples, final=True)
+        result = self.transcribe_fn(samples, final=True, word_timestamps=self.word_timestamps)
         text = result if isinstance(result, str) else result.get("text", "")
         utterance.final_text = text
         segments = result.get("segments", []) if isinstance(result, dict) else []
         lang = result.get("language", "en") if isinstance(result, dict) else "en"
         conf = float(result.get("avg_logprob", -0.5)) if isinstance(result, dict) else -0.5
-        self._reset()
-        return {
+        out = {
             "type": "final", "utteranceId": utterance.utterance_id,
             "finalText": text, "segments": segments, "language": lang, "confidence": conf,
         }
+        if isinstance(result, dict) and result.get("words") is not None:
+            out["words"] = result["words"]
+        self._reset()
+        return out
