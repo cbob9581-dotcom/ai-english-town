@@ -2350,6 +2350,10 @@ class ScenePrefetchCache:
             oldest = min(self._items, key=lambda k: self._items[k][0])
             self._items.pop(oldest, None)
         self._items[archetype_id] = (time.time() + self._ttl_s, proposal)
+
+    def invalidate(self, archetype_id: str) -> None:
+        """丢弃某 archetype 的缓存提案。缓存提案无法应用时、回退 Director 前必须调用（防递归）。"""
+        self._items.pop(archetype_id, None)
 ```
 
 - [ ] **Step 2: 运行确认失败**
@@ -2395,6 +2399,8 @@ async def _apply_proposal(app, events, state, session_id, send, *,
             await send({"type": "scene.patch", "sceneId": scene_id, "generationId": generation_id,
                         "baseRevision": state.scene.revision - 1, "patchId": patch_id, "ops": ops})
     except (ProposalError, Exception):  # noqa: BLE001 —— 缓存提案异常时回退到 Director 填充
+        # 先失效缓存条目：否则 fill_scene 重读同一坏提案 → _apply_proposal → 无限递归
+        app.state.prefetch.invalidate(archetype_id)
         await fill_scene(app, events, state, session_id, send, scene_id=scene_id,
                          seed=seed, generation_id=generation_id, skeleton=skeleton)
 ```
