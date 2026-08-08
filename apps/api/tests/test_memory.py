@@ -209,3 +209,16 @@ def test_ask_no_bump_when_already_asked(tmp_path):
                                         now=now) is False
         conn.commit()
     assert mem.get_revision("local") == 0
+
+def test_build_world_summary_skips_malformed_scene_event(tmp_path):
+    events = EventStore(tmp_path / "e.db")
+    conn = events.connection
+    LearningStore(conn)
+    events.append("s1", "scene.entered", {"sceneId": "sc1", "generationId": "g1",
+                                          "revision": 1, "source": "connect"})   # 缺 archetypeId
+    events.append("s1", "scene.entered", {"archetypeId": "bakery", "sceneId": "sc2",
+                                          "generationId": "g2", "revision": 1, "source": "connect"})
+    summary = build_world_summary(events, conn, "local", now=_now())
+    assert "bakery" in summary["scenes"]
+    assert None not in summary["scenes"]      # 缺 archetypeId 的事件被跳过 → 无 None/"null" 键
+    assert "null" not in summary["scenes"]

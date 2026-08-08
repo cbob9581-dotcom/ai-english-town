@@ -56,8 +56,8 @@ class LearningEngine:
                 try:
                     self.memory.apply_memory_updates(conn, self.events, "local",
                                                      evidence=evidence, now=_now)
-                except Exception:  # noqa: BLE001 —— 记忆抽取失败不杀证据事务、revision 不推进
-                    pass
+                except Exception as e:  # noqa: BLE001 —— 记忆抽取失败不杀证据事务、revision 不推进
+                    print(f"memory update failed: {e}", flush=True)
                 conn.commit()
                 return seq
             except Exception:  # noqa: BLE001 —— 证据失败不杀回合；入 outbox 下次补

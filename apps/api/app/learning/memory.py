@@ -112,6 +112,8 @@ def build_world_summary(events, conn, user_id: str, *, now: datetime) -> dict:
     for r in rows:
         p = json.loads(r[0])
         a = p.get("archetypeId")
+        if not a:
+            continue
         cur = scenes.setdefault(a, {"count": 0, "lastAt": None})
         cur["count"] += 1
         cur["lastAt"] = p.get("generationId", "")

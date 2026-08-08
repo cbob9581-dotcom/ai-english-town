@@ -89,7 +89,7 @@ async def enter_scene(app, events, state, session_id, send, *,
                                          scene_enter=target, now=datetime.now(timezone.utc))
                 events.connection.commit()
         except Exception:  # noqa: BLE001 —— 记忆失败不杀进场
-            pass
+            events.connection.rollback()
     await send({
         "type": "scene.skeleton", "sceneId": scene_id, "generationId": generation_id,
         "archetypeId": target, "revision": 1, "status": "skeleton",
