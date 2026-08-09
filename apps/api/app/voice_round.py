@@ -20,20 +20,21 @@ WsSend = Callable[[object], Awaitable[None]]
 
 def _write_consent_audio(session_id: str, utterance_id: str, pcm: bytes,
                          settings, meta: dict) -> None:
-    """授权时写 WAV + 元数据；失败仅日志。调用方仅在回合完全成功（replied=True）时调用。"""
+    """授权时写 JSON 元数据 + WAV；失败仅日志。调用方仅在回合完全成功（replied=True）时调用。
+    先写 JSON 后写 WAV：JSON 是事实源，WAV 写失败只留无音频的元数据，不产生孤儿 WAV。"""
     if not getattr(settings, "pronunciation_audio_consent", False):
         return
     try:
         root = Path(settings.tutor_cache_dir).parent / "pronunciation-audio"
         dirpath = root / session_id
         dirpath.mkdir(parents=True, exist_ok=True)
+        (dirpath / f"{utterance_id}.json").write_text(
+            json.dumps(meta, ensure_ascii=False), encoding="utf-8")
         with wave.open(str(dirpath / f"{utterance_id}.wav"), "wb") as w:
             w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000)
             w.writeframes(pcm)
-        (dirpath / f"{utterance_id}.json").write_text(
-            json.dumps(meta, ensure_ascii=False), encoding="utf-8")
-    except Exception:  # noqa: BLE001 —— 落盘失败不影响回合/评分
-        pass
+    except Exception as e:  # noqa: BLE001 —— 落盘失败不影响回合/评分
+        print(f"consent audio write failed: {e}", flush=True)
 
 
 async def run_round(

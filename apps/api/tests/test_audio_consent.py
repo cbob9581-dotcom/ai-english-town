@@ -1,5 +1,4 @@
-import asyncio, json, wave
-from pathlib import Path
+import asyncio, wave
 from app.event_store import EventStore
 from app.voice_round import run_round
 from app.settings import Settings

@@ -1,5 +1,5 @@
 """ScenePlan 服务端缓存：预取 Director 提案（非骨架——骨架本地无条件快）。
-键 = archetypeId（阶段 3 无 world memory，revision 恒 0），TTL 过期即失效。"""
+键 = (archetype_id, revision)，TTL 过期即失效。"""
 from __future__ import annotations
 
 import time

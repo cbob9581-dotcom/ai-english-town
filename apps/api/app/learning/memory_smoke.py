@@ -1,5 +1,6 @@
 """memory_smoke：回放 session_events 的 scene.entered → WorldSummary + 最终 revision + 增长频率。
-实测「一轮多证据/连续进场 revision 不暴涨」。用法: uv run --project apps/api python -m app.learning.memory_smoke <db_path>"""
+实测「一轮多证据/连续进场 revision 不暴涨」。
+用法: cd apps/api && uv run -m app.learning.memory_smoke <db_path>"""
 from __future__ import annotations
 
 import json
@@ -24,6 +25,8 @@ def main(db_path: Path) -> dict:
         "SELECT payload_json FROM session_events WHERE event_type='scene.entered' ORDER BY sequence").fetchall()
     for r in rows:
         arch = json.loads(r[0]).get("archetypeId")
+        if arch is None:
+            continue
         # 重放语义：apply 内部 _store_summary→cache.refresh 会让 visited_archetypes
         # 一次看到库内全部场景（build_world_summary 全量重建），使首个 touch 后所有场景
         # 都被视为"已访问"，revision 卡死在 1。这里按回放进度覆盖 visited，使每个新场景
@@ -40,7 +43,7 @@ def main(db_path: Path) -> dict:
         "summary": mem.get_world_summary("local") or build_world_summary(events, conn, "local", now=now),
         "revisionHistory": revisions,
         "revisionGrowth": {"touches": len([b for b in bumps if b > 0]),
-                           "maxStep": max(bumps, default=1)},
+                           "maxStep": max(bumps, default=0)},
     }
 
 

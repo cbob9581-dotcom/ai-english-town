@@ -132,7 +132,8 @@ def build_world_summary(events, conn, user_id: str, *, now: datetime) -> dict:
             weak.append({"wordId": r["word_id"], "lemma": r["lemma"],
                          "sum": (r["productive_score"] or 0.0) + (r["receptive_score"] or 0.0)})
     weak.sort(key=lambda w: w["sum"])
-    # 平均分/求助仅统计已进入复习周期的词（state != 'new'），与 weakWords/reviewDue 口径一致
+    # help_count 的 SUM 与 AVG 同受 `state != 'new'` 过滤 → 下计（求助词多处于 new 前）。
+    # 意图性：userProfile 描述复习中学习者，与 reviewDue/weakWords 口径一致（维持现状，不加分拆）。
     prof = conn.execute(
         "SELECT AVG(productive_score) AS p, AVG(receptive_score) AS r, "
         "AVG(asr_word_confidence_score) AS awc, SUM(help_count) AS hc "
