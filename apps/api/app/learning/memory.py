@@ -126,7 +126,7 @@ def build_world_summary(events, conn, user_id: str, *, now: datetime) -> dict:
     weak = []
     for r in mrows:
         states[r["state"]] = states.get(r["state"], 0) + 1
-        if r["state"] != "new" and r["due"] and r["due"] <= now.isoformat():
+        if r["state"] != "new" and r["due"] and datetime.fromisoformat(r["due"]) <= now:
             due += 1
         if r["state"] != "new":
             weak.append({"wordId": r["word_id"], "lemma": r["lemma"],

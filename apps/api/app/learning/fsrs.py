@@ -24,9 +24,10 @@ def _scheduler() -> Scheduler:
 
 
 def to_fsrs_card(row: Mapping, *, card_id: int) -> Card:
-    """mastery_states 行 → py-fsrs Card。state='new' → 全新 Card（默认 Learning/step 0）。
-    card_id 必须显式传入：Card() 默认构造含 time.sleep(0.001)。"""
-    if row["state"] == "new":
+    """mastery_states 行 → py-fsrs Card。state='new' 或 stability<=0（非新态但无效稳定性）
+    → 全新 Card（默认 Learning/step 0）。guard 防 py-fsrs 对 0 稳定性卡 ZeroDivisionError
+    （0**负幂）；走新卡路径而非硬塞 1.0，避免破坏复习节奏。"""
+    if row["state"] == "new" or row.get("stability", 0.0) <= 0:
         return Card(card_id=card_id)
     due = datetime.fromisoformat(row["due"]) if row.get("due") else datetime.now(timezone.utc)
     last = datetime.fromisoformat(row["last_review"]) if row.get("last_review") else None

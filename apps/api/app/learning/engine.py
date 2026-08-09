@@ -60,8 +60,9 @@ class LearningEngine:
                     print(f"memory update failed: {e}", flush=True)
                 conn.commit()
                 return seq
-            except Exception:  # noqa: BLE001 —— 证据失败不杀回合；入 outbox 下次补
+            except Exception as e:  # noqa: BLE001 —— 证据失败不杀回合；入 outbox 下次补
                 conn.rollback()
+                print(f"evidence dropped to outbox: {e!r}", flush=True)
                 try:
                     self.store.outbox_push("local", json.dumps(evidence, ensure_ascii=False))
                 except Exception:  # noqa: BLE001 —— outbox 也失败则只丢日志

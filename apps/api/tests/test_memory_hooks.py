@@ -29,18 +29,19 @@ def test_one_round_multi_evidence_revision_at_most_one(tmp_path):
     conn = events.connection
     store = LearningStore(conn)
     _seed(conn)
-    # 预置 loaf 已 known：help 是「新求助」→ +1；随后同词 prompted/click 只打已知词 → 不重复 +
-    # （若 seed 为 new，第三次 success 证据会把 loaf 送入 learning —— 那是另一个实质变化，应 +1，由 test_new_word... 覆盖）
-    conn.execute("INSERT INTO mastery_states(user_id,word_id,state,updated_at) "
-                 "VALUES('local','word_loaf_n_1','learning','2026-08-08T12:00:00Z')")
+    # 预置 loaf 已 known（learning）+ 正 stability：prompted 证据经日闸真实排期（非空转）
+    conn.execute("INSERT INTO mastery_states(user_id,word_id,state,stability,difficulty,due,last_review,updated_at) "
+                 "VALUES('local','word_loaf_n_1','learning',3.0,5.0,'2026-08-08T00:00:00Z',"
+                 "'2026-08-08T00:00:00Z','2026-08-08T12:00:00Z')")
     eng = LearningEngine(store, events, Settings())
-    # 一轮：help（新求助）→ +1；随后同词 prompted / click → 不重复 +
-    eng.record_evidence("s1", _evidence(source="help", result="neutral"), event_id="h1")
+    eng.record_evidence("s1", _evidence(source="help", result="neutral", evidence_id="ev_h1"), event_id="h1")
     assert eng.memory.get_revision("local") == 1
-    eng.record_evidence("s1", _evidence(), event_id="p1")
+    eng.record_evidence("s1", _evidence(evidence_id="ev_p1"), event_id="p1")
     assert eng.memory.get_revision("local") == 1
-    eng.record_evidence("s1", _evidence(source="action_understanding", prompt_level=1), event_id="c1")
+    eng.record_evidence("s1", _evidence(source="action_understanding", prompt_level=1, evidence_id="ev_c1"), event_id="c1")
     assert eng.memory.get_revision("local") == 1
+    # 三条证据全部真实落库（evidence_id 唯一，不再被 INSERT OR IGNORE 丢行）
+    assert len(store.evidence_for_word("local", "word_loaf_n_1")) == 3
 
 def test_new_word_entering_learning_bumps_revision(tmp_path):
     events = EventStore(tmp_path / "e.db")
@@ -84,3 +85,15 @@ def test_record_ask_with_events_fires_ask_hook(tmp_path):
 
     record_ask(store, "local", "s1", "torch", "n", "turn2", now=now, events=events)
     assert store.memory.get_revision("local") == 1   # 已求助 → 不重复 +
+
+def test_review_due_parsed_as_datetime_z_suffix(tmp_path):
+    """due 带 Z 后缀：字符串比较会因 'Z' > '+' 而错判为未到期；datetime 解析后精确比较。"""
+    events = EventStore(tmp_path / "e.db")
+    conn = events.connection
+    store = LearningStore(conn)
+    _seed(conn)
+    conn.execute("INSERT INTO mastery_states(user_id,word_id,state,due,updated_at) "
+                 "VALUES('local','word_loaf_n_1','review','2026-08-08T00:00:00Z','2026-08-08T12:00:00Z')")
+    summary = build_world_summary(events, conn, "local",
+                                  now=datetime(2026, 8, 8, 0, 0, 0, tzinfo=timezone.utc))
+    assert summary["wordMastery"]["reviewDue"] == 1
