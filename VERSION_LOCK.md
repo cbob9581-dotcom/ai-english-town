@@ -46,6 +46,12 @@
 > B 诊断类任务（纯 API 代码，无网络依赖）先做；Task 6 真机验证 word_timestamps 与 A 覆盖率门
 > 受此阻断，届时如实记录 not-measurable，不臆造数字。网络恢复后重试。
 
+> 2026-08-09（phase-6 Task 6）真机验证 word_timestamps：**not-measurable（deferred）**——
+> ① 无真实英文音频：kokoro voices 模型未下载（VERSION_LOCK 已知）、仓库无任何 WAV 文件、
+> 下载样本被网络阻断（PyPI/pypi.org 连通性再测 15s 超时）；② cuBLAS 缺失阻断 GPU 转写。
+> 「3s 转写」「词级时间戳实测/词窗拦截比例」两项保持 deferred，无数字可回填，不臆造。
+> A 覆盖率门（Task 8）同受网络阻断（需下载 wav2vec2 模型 dump alphabet）。
+
 启动自检项：GPU 名称 / CUDA 可用性 / ASR 模型加载 / 3s 转写 / 一句 TTS / 峰值显存 / 峰值耗时。
 
 ## 阶段 3 运行注意（沿用阶段 2 env quirks）
