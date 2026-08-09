@@ -7,11 +7,13 @@ import numpy as np
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
+from asr_worker.pronunciation import PhonemeAligner, expected_phonemes_from_ipa, score_gop
 from asr_worker.streaming import RollingTranscriber, UtteranceState
 from asr_worker.whisper_engine import WhisperEngine, word_timestamps_active
 
 app = FastAPI(title="asr-worker")
 ENGINE: WhisperEngine | None = None
+PRONUNCIATION: "PhonemeAligner | None" = None
 
 
 @app.on_event("startup")
@@ -74,3 +76,33 @@ async def transcribe(req: "TranscribeRequest") -> dict:
 def rt_finalize(samples) -> dict:
     u = UtteranceState("one-shot")
     return RollingTranscriber(ENGINE.transcribe, word_timestamps=getattr(ENGINE, "word_timestamps_enabled", False)).finalize(u, samples, 16000)  # type: ignore[union-attr]
+
+
+class PronounceRequest(BaseModel):
+    wav_b64: str
+    ipa: str
+    device: str = "cpu"
+
+
+@app.post("/pronounce")
+async def pronounce(req: "PronounceRequest") -> dict:
+    """GOP 评分：16k mono PCM16 词窗段 + 词典 IPA → 音素级 GOP。
+    模型缺失/缺映射/对齐异常 → degraded 响应（api 侧据此回退词级代理，不产生证据）。"""
+    import base64
+    import logging
+    global PRONUNCIATION
+    if PRONUNCIATION is None:
+        PRONUNCIATION = PhonemeAligner(device=req.device)
+    if not PRONUNCIATION.available:
+        return {"gop": None, "phoneme_scores": {}, "degraded": True}
+    phones = expected_phonemes_from_ipa(req.ipa)
+    if phones is None:
+        return {"gop": None, "phoneme_scores": {}, "degraded": True}
+    try:
+        result = score_gop(base64.b64decode(req.wav_b64), phones, PRONUNCIATION, device=req.device)
+    except Exception as e:  # noqa: BLE001 —— 评分失败降级，不污染证据流
+        logging.getLogger("asr_worker").warning("pronounce failed: %s", e)
+        return {"gop": None, "phoneme_scores": {}, "degraded": True}
+    if result is None:
+        return {"gop": None, "phoneme_scores": {}, "degraded": True}
+    return result

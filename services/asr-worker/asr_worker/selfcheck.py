@@ -1,12 +1,27 @@
-"""启动自检：GPU/CUDA/模型加载/3 秒转写/峰值显存与耗时。"""
+"""启动自检：GPU/CUDA/模型加载/3 秒转写/峰值显存与耗时 + GOP（发音）三态。"""
 from __future__ import annotations
 
 import os
+import sys
 import time
 
 import numpy as np
 
 from asr_worker.whisper_engine import WhisperEngine, word_timestamps_active
+
+
+def _gop_ok() -> str:
+    """GOP 发音评分三态：未启用/模型缺失 → unavailable；加载可用 → ok；加载降级 → degraded。
+    失败日志写 stderr（stdout 是 run_in 的 JSON 契约，见 scripts/startup-selfcheck.py）。"""
+    if os.environ.get("PRONUNCIATION_GOP_ENABLED", "").lower() != "true":
+        return "unavailable"
+    try:
+        from asr_worker.pronunciation import PhonemeAligner
+        dev = os.environ.get("PRONUNCIATION_GOP_DEVICE", "cpu")
+        return "ok" if PhonemeAligner(device=dev).available else "degraded"
+    except Exception as e:  # noqa: BLE001
+        print(f"gop selfcheck failed: {e}", file=sys.stderr, flush=True)
+        return "unavailable"
 
 
 def _nvidia_gpu() -> str:
@@ -24,12 +39,13 @@ def run(wav_path: str | None = None) -> dict:
     import wave
 
     start = time.perf_counter()
+    gop_ok = _gop_ok()
     try:
         engine = WhisperEngine.load("auto", model=os.environ.get("ASR_MODEL"))
         load_secs = time.perf_counter() - start
     except Exception as e:  # noqa: BLE001
         load_secs = time.perf_counter() - start
-        return {"gpu_name": _nvidia_gpu(), "cuda_ok": False, "load_secs": load_secs, "peak_vram_mib": -1, "transcribe_ok": False, "transcribe_secs": -1.0, "device": "n/a", "error": str(e)}
+        return {"gpu_name": _nvidia_gpu(), "cuda_ok": False, "load_secs": load_secs, "peak_vram_mib": -1, "transcribe_ok": False, "transcribe_secs": -1.0, "device": "n/a", "error": str(e), "gop_ok": gop_ok}
     if wav_path:
         with wave.open(wav_path, "rb") as w:
             assert w.getnchannels() == 1 and w.getsampwidth() == 2, "selfcheck wav 必须 mono 16bit"
@@ -48,8 +64,8 @@ def run(wav_path: str | None = None) -> dict:
         transcribe_ok = bool(result["text"].strip())
         transcribe_secs = time.perf_counter() - t0
     except Exception as e:  # noqa: BLE001
-        return {"gpu_name": _nvidia_gpu(), "cuda_ok": engine.device == "cuda", "load_secs": load_secs, "peak_vram_mib": -1, "transcribe_ok": False, "transcribe_secs": -1.0, "device": engine.device, "error": str(e)}
-    return {"gpu_name": _nvidia_gpu(), "cuda_ok": engine.device == "cuda", "load_secs": round(load_secs, 2), "peak_vram_mib": _peak_vram(), "transcribe_ok": transcribe_ok, "transcribe_secs": round(transcribe_secs, 3), "device": engine.device, "sample": result["text"],
+        return {"gpu_name": _nvidia_gpu(), "cuda_ok": engine.device == "cuda", "load_secs": load_secs, "peak_vram_mib": -1, "transcribe_ok": False, "transcribe_secs": -1.0, "device": engine.device, "error": str(e), "gop_ok": gop_ok}
+    return {"gpu_name": _nvidia_gpu(), "cuda_ok": engine.device == "cuda", "load_secs": round(load_secs, 2), "peak_vram_mib": _peak_vram(), "transcribe_ok": transcribe_ok, "transcribe_secs": round(transcribe_secs, 3), "device": engine.device, "sample": result["text"], "gop_ok": gop_ok,
             "word_timestamps": word_timestamps_active(
                 engine,
                 os.environ.get("ENABLE_WORD_TIMESTAMPS", "").lower() == "true",
