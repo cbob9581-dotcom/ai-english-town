@@ -39,6 +39,13 @@
 > （voices-v1.0.bin 缺失）；asr 模型加载成功（device=cuda, load_secs=4.48s）但转写报 cuBLAS DLL 缺失。
 > 完整门禁（`e2e_voice_ok: true`）需：① 下载 kokoro 模型文件；② 安装 CUDA 运行时（cuBLAS/cuDNN）。
 
+> 2026-08-09（phase-6 Task 1）重试记录：`uv add --project services/asr-worker nvidia-cublas-cu12 nvidia-cudnn-cu12`
+> 下载**停滞**——uv 进程经本地代理 127.0.0.1:10801 连接空闲、uv 缓存 15 分钟零增长、
+> `curl https://pypi.org/simple/` 挂死 160s+ 无响应。已终止安装并回退 pyproject.toml/uv.lock 半成品改动，
+> **CUDA runtime 保持 deferred（cublas64_12.dll 仍缺失）**。phase-6 执行顺序改走降级路径：
+> B 诊断类任务（纯 API 代码，无网络依赖）先做；Task 6 真机验证 word_timestamps 与 A 覆盖率门
+> 受此阻断，届时如实记录 not-measurable，不臆造数字。网络恢复后重试。
+
 启动自检项：GPU 名称 / CUDA 可用性 / ASR 模型加载 / 3s 转写 / 一句 TTS / 峰值显存 / 峰值耗时。
 
 ## 阶段 3 运行注意（沿用阶段 2 env quirks）
