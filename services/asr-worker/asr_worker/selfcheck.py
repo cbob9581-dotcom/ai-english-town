@@ -25,7 +25,7 @@ def run(wav_path: str | None = None) -> dict:
 
     start = time.perf_counter()
     try:
-        engine = WhisperEngine.load("auto")
+        engine = WhisperEngine.load("auto", model=os.environ.get("ASR_MODEL"))
         load_secs = time.perf_counter() - start
     except Exception as e:  # noqa: BLE001
         load_secs = time.perf_counter() - start
