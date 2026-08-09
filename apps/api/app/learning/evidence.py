@@ -67,6 +67,17 @@ def apply_evidence(store, user_id: str, ev: dict, *, now: datetime) -> None:
                              asr_word_confidence_score=update_score(m["asr_word_confidence_score"], weight, ev["confidence"]),
                              updated_at=now.isoformat())
         return
+    if source == "pronunciation_gop":
+        # 音素级 GOP：只更新 pronunciation_score 轴分（可空列，NULL=未评测）+ 证据明细；
+        # 不计数（与词级置信度同理，防双重计 attempts）、不进排期、不参与选词/薄弱词排序。
+        m = store.get_mastery(user_id, wid)
+        if m is None:
+            store.upsert_mastery(user_id, wid, updated_at=now.isoformat())
+            m = store.get_mastery(user_id, wid)
+        store.upsert_mastery(user_id, wid,
+                             pronunciation_score=update_score(m["pronunciation_score"] or 0.0, weight, ev["confidence"]),
+                             updated_at=now.isoformat())
+        return
     m = store.get_mastery(user_id, wid)
     if m is None:
         store.upsert_mastery(user_id, wid, updated_at=now.isoformat())

@@ -47,6 +47,14 @@ class Settings:
     word_timestamp_min_model: str = "whisper-large-v3"
     pronunciation_audio_consent: bool = False     # 默认关；开才落盘 WAV
 
+    # --- 阶段 6：GOP 音素级发音评测 ---
+    pronunciation_gop_enabled: bool = False          # 默认关
+    pronunciation_gop_model: str = "facebook/wav2vec2-lv-60-espeak-cv-ft"
+    pronunciation_gop_device: str = "cpu"            # 默认 CPU，规避 ct2/torch CUDA 冲突
+    pronunciation_gop_min_word_ms: int = 120         # 词窗最短时长，过短不评
+    pronunciation_gop_word_pad_ms: int = 100         # 词窗双侧 pad，补偿 whisper 时间戳误差
+    pronunciation_gop_min_conf: float | None = None  # 阈值先 None；kokoro golden 分布量后再定
+
     _ENV_FIELDS = {
         "llm_base_url": "LLM_BASE_URL",
         "llm_api_key": "DEEPSEEK_API_KEY",
@@ -79,6 +87,12 @@ class Settings:
         "enable_word_timestamps": "ENABLE_WORD_TIMESTAMPS",
         "word_timestamp_min_model": "WORD_TIMESTAMP_MIN_MODEL",
         "pronunciation_audio_consent": "PRONUNCIATION_AUDIO_CONSENT",
+        "pronunciation_gop_enabled": "PRONUNCIATION_GOP_ENABLED",
+        "pronunciation_gop_model": "PRONUNCIATION_GOP_MODEL",
+        "pronunciation_gop_device": "PRONUNCIATION_GOP_DEVICE",
+        "pronunciation_gop_min_word_ms": "PRONUNCIATION_GOP_MIN_WORD_MS",
+        "pronunciation_gop_word_pad_ms": "PRONUNCIATION_GOP_WORD_PAD_MS",
+        "pronunciation_gop_min_conf": "PRONUNCIATION_GOP_MIN_CONF",
     }
 
     @classmethod
@@ -95,6 +109,8 @@ class Settings:
                     kw[field] = int(raw)
                 elif isinstance(default, float):
                     kw[field] = float(raw)
+                elif field == "pronunciation_gop_min_conf":
+                    kw[field] = float(raw) if raw not in ("", "none", "null") else None
                 else:
                     kw[field] = Path(raw) if field == "tutor_cache_dir" else raw
         return cls(**kw)

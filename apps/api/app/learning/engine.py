@@ -83,7 +83,8 @@ class LearningEngine:
     def record_round(self, session_id: str, scene_words: dict, npc_text: str,
                      user_text: str, confidence: float, *, turn_id: str,
                      target_word_ids: set[str], attempt_id: str | None = None,
-                     words: list[dict] | None = None) -> int:
+                     words: list[dict] | None = None,
+                     gop_scores: dict[str, float] | None = None) -> int:
         conf = normalize_asr_confidence(confidence) if confidence < 0 else confidence
         drafts = classify_round(scene_words, npc_text, user_text, conf,
                                 target_word_ids=target_word_ids)
@@ -106,6 +107,8 @@ class LearningEngine:
         if words is not None:
             self._record_word_production(session_id, scene_words, user_text, words,
                                          drafts, turn_id, attempt_id)
+        if gop_scores:
+            self._record_gop(session_id, drafts, turn_id, attempt_id, gop_scores)
         return len(drafts)
 
     def _record_word_production(self, session_id: str, scene_words: dict, user_text: str,
@@ -125,6 +128,30 @@ class LearningEngine:
                 "objective_id": f"obj_scene_{wid}",
                 "word_id": wid, "source": "word_production", "prompt_level": 0,
                 "axis": "asr_word_confidence", "result": "success", "confidence": score,
+                "evidence_policy_version": self.settings.evidence_policy_version,
+                "fsrs_algorithm_version": self.settings.fsrs_algorithm_version,
+                "created_at": now.isoformat(),
+            }
+            self.record_evidence(session_id, evidence, event_id=evidence["evidence_id"])
+
+    def _record_gop(self, session_id: str, drafts: list[dict], turn_id: str,
+                    attempt_id: str | None, gop_scores: dict[str, float]) -> None:
+        """先算后写：gop_scores 是锁外 /pronounce 的纯数据；这里锁内只写证据 + 更新列。
+        只对用户产出词（在 drafts 中）写入；result 依 min_conf（None=只入证据不判）。"""
+        draft_ids = {d["word_id"] for d in drafts}
+        now = datetime.now(timezone.utc)
+        min_conf = self.settings.pronunciation_gop_min_conf
+        for wid, gop in gop_scores.items():
+            if wid not in draft_ids:
+                continue
+            result = "success" if (min_conf is None or gop >= min_conf) else "uncertain"
+            evidence = {
+                "evidence_id": f"ev_{uuid.uuid4().hex[:12]}",
+                "event_seq": 0, "session_id": session_id,
+                "attempt_id": attempt_id or f"attempt_{turn_id}",
+                "turn_id": turn_id, "objective_id": f"obj_scene_{wid}",
+                "word_id": wid, "source": "pronunciation_gop", "prompt_level": 0,
+                "axis": "pronunciation_gop", "result": result, "confidence": gop,
                 "evidence_policy_version": self.settings.evidence_policy_version,
                 "fsrs_algorithm_version": self.settings.fsrs_algorithm_version,
                 "created_at": now.isoformat(),

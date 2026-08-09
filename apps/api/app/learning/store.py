@@ -127,11 +127,14 @@ class LearningStore:
         self.memory: MemoryStore | None = None
 
     def _migrate(self) -> None:
-        """旧库幂等迁移：mastery_states 缺 asr_word_confidence_score 列则 ALTER 加列。"""
+        """旧库幂等迁移：mastery_states 缺列则 ALTER 加列。
+        asr 代理列 NOT NULL DEFAULT 0.0；pronunciation_score 可空（NULL=未评测，与 0 分区分）。"""
         cols = {r[1] for r in self.conn.execute("PRAGMA table_info(mastery_states)")}
         if "asr_word_confidence_score" not in cols:
             self.conn.execute(
                 "ALTER TABLE mastery_states ADD COLUMN asr_word_confidence_score REAL NOT NULL DEFAULT 0.0")
+        if "pronunciation_score" not in cols:
+            self.conn.execute("ALTER TABLE mastery_states ADD COLUMN pronunciation_score REAL")
         self.conn.commit()
 
     def import_words(self, user_id: str, list_id: str, name: str, items: list[dict]) -> tuple[int, int, int, int]:
@@ -251,7 +254,8 @@ class LearningStore:
             "       COALESCE(ms.productive_score, 0.0) AS productive_score, "
             "       COALESCE(ms.receptive_score, 0.0) AS receptive_score, "
             "       COALESCE(ms.asr_confidence_score, 0.0) AS asr_confidence_score, "
-            "       COALESCE(ms.asr_word_confidence_score, 0.0) AS asr_word_confidence_score "
+            "       COALESCE(ms.asr_word_confidence_score, 0.0) AS asr_word_confidence_score, "
+            "       ms.pronunciation_score AS pronunciation_score "
             "FROM learning_items li "
             "LEFT JOIN mastery_states ms ON ms.user_id = li.user_id AND ms.word_id = li.word_id "
             "WHERE li.user_id=? ORDER BY li.created_at", (user_id,)).fetchall()
