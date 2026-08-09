@@ -97,3 +97,32 @@ def test_review_due_parsed_as_datetime_z_suffix(tmp_path):
     summary = build_world_summary(events, conn, "local",
                                   now=datetime(2026, 8, 8, 0, 0, 0, tzinfo=timezone.utc))
     assert summary["wordMastery"]["reviewDue"] == 1
+
+def test_record_ask_without_events_suppresses_hook(tmp_path):
+    """省略 events= 应抑制记忆钩子（负向对照：不是任何 record_ask 都触发 +revision）。"""
+    events = EventStore(tmp_path / "e.db")
+    store = LearningStore(events.connection)
+    store.memory = MemoryStore(events.connection)
+    now = datetime(2026, 8, 8, 12, 0, tzinfo=timezone.utc)
+    record_ask(store, "local", "s1", "torch", "n", "turn1", now=now)   # 无 events=
+    assert store.memory.get_revision("local") == 0
+    assert store.memory.get_world_summary("local") is None
+
+def test_replaying_snapshot_events_does_not_bump_revision(tmp_path):
+    """world_summary.snapshot 是 internal 事件；apply_memory_updates 对 evidence 外的
+    重放（含内部 snapshot）不推进 revision —— 重放幂等。"""
+    events = EventStore(tmp_path / "e.db")
+    conn = events.connection
+    store = LearningStore(conn)
+    _seed(conn)
+    eng = LearningEngine(store, events, Settings())
+    eng.record_evidence("s1", _evidence(source="help", result="neutral", evidence_id="ev_h1"), event_id="h1")
+    assert eng.memory.get_revision("local") == 1
+    conn.execute(
+        "INSERT INTO session_events(sequence, event_id, session_id, event_type, payload_json, internal, created_at) "
+        "VALUES((SELECT COALESCE(MAX(sequence),0)+1 FROM session_events WHERE session_id='s1'), 'mem_replay', 's1', "
+        "'world_summary.snapshot', '{\"summary\":{}}', 1, '2026-08-08T12:00:00Z')")
+    conn.commit()
+    summary = eng.memory.get_world_summary("local")
+    assert summary is not None
+    assert eng.memory.get_revision("local") == 1   # 重放不 +revision
