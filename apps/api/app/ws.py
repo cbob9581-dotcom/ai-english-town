@@ -116,13 +116,23 @@ async def ws_session(ws: WebSocket) -> None:
                                          world_summary=world_summary)
                 learning = getattr(app.state, "learning", None)
                 if learning and result.get("replied") and state.scene is not None:
+                    from app.learning.gop_client import maybe_score_round_gop, post_json
+                    # 先算后写：锁外调 /pronounce 得 word_gop（纯数据）；失败 → None 降级，不影响回合与证据。
+                    try:
+                        gop_scores = await maybe_score_round_gop(
+                            store=learning.store, session_id=session_id, utterance_id=utterance_id,
+                            settings=settings, scene_words=state.scene_words,
+                            words=result.get("words"), target_word_ids=state.target_word_ids,
+                            http_post=post_json)
+                    except Exception:  # noqa: BLE001 —— GOP 预计算失败降级，回合与证据不受影响
+                        gop_scores = None
                     try:
                         learning.record_round(
                             session_id, state.scene_words,
                             result.get("npcText", ""), result.get("finalText", ""),
                             result.get("confidence", -0.5), turn_id=result["turnId"],
                             target_word_ids=state.target_word_ids,
-                            words=result.get("words"))
+                            words=result.get("words"), gop_scores=gop_scores)
                     except Exception:  # noqa: BLE001 —— 学习证据失败不杀回合
                         pass
         except asyncio.CancelledError:
