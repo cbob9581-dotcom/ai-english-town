@@ -108,9 +108,8 @@ def test_record_ask_without_events_suppresses_hook(tmp_path):
     assert store.memory.get_revision("local") == 0
     assert store.memory.get_world_summary("local") is None
 
-def test_replaying_snapshot_events_does_not_bump_revision(tmp_path):
-    """world_summary.snapshot 是 internal 事件；apply_memory_updates 对 evidence 外的
-    重放（含内部 snapshot）不推进 revision —— 重放幂等。"""
+def test_reapplying_same_evidence_does_not_bump_revision(tmp_path):
+    """重跑同一 help 证据：缓存已含 loaf → touched=False，不 +revision（重放幂等）。"""
     events = EventStore(tmp_path / "e.db")
     conn = events.connection
     store = LearningStore(conn)
@@ -118,11 +117,9 @@ def test_replaying_snapshot_events_does_not_bump_revision(tmp_path):
     eng = LearningEngine(store, events, Settings())
     eng.record_evidence("s1", _evidence(source="help", result="neutral", evidence_id="ev_h1"), event_id="h1")
     assert eng.memory.get_revision("local") == 1
-    conn.execute(
-        "INSERT INTO session_events(sequence, event_id, session_id, event_type, payload_json, internal, created_at) "
-        "VALUES((SELECT COALESCE(MAX(sequence),0)+1 FROM session_events WHERE session_id='s1'), 'mem_replay', 's1', "
-        "'world_summary.snapshot', '{\"summary\":{}}', 1, '2026-08-08T12:00:00Z')")
-    conn.commit()
-    summary = eng.memory.get_world_summary("local")
-    assert summary is not None
+    # 重跑同一证据路径：缓存刷新后 touched=False，revision 不 +1
+    touched = eng.memory.apply_memory_updates(
+        conn, events, "local",
+        evidence={"word_id": "word_loaf_n_1", "source": "help", "session_id": "s1"}, now=_now())
+    assert touched is False
     assert eng.memory.get_revision("local") == 1   # 重放不 +revision
