@@ -80,6 +80,16 @@ score_gop(audio_wav: bytes, expected_phonemes: list[str], aligner, *, device="cp
 - **词窗（精度修正）**：复用 phase-5 `words` 词级时间戳的 `start/end`；whisper 词级时间戳来自 cross-attention、误差几十~百 ms → **双侧 pad `pronunciation_gop_word_pad_ms`（默认 100ms）** 并 **clamp 到整段音频边界**；词窗 < `pronunciation_gop_min_word_ms` 或词未命中 `words` → 该词回退代理；真机（C.step2 后）**记录词窗拦截比例**为验收数据。
 - **确定性**：纯函数；注入 `aligner`（生产 = torchaudio aligner；测试 = mock 返回固定后验）。**测试断言分级**：mock → 精确值；真模型 → 区间（如 GOP ∈ (0.5, 1.0)），不写死浮点。
 
+#### 4.3 附注 — A 前置门真机裁决（Task 8，2026-08-09）
+
+真机跑门 `uv run --project services/asr-worker python scripts/ipa-coverage.py --device cpu`（网络恢复后）：
+
+- **裁决：`ok`** —— `total=4 / coverable=4 / partial=0 / ratio=1.0 / verdict="ok" / unmapped=[] / unaligned=[]`。**A 继续（Task 9-12）**。
+- **`dump_vocab` 适配**：transformers 5.14.1 的 `Wav2Vec2PhonemeCTCTokenizer` 实例化强制要求 `phonemizer`（本机未装，且本门只需 alphabet 不需文本→音素）；改为经 `huggingface_hub` 直接读模型 `vocab.json`，等价于 `processor.tokenizer.get_vocab()`，返回契约与异常语义不变。
+- **英语音素子集修正（重要）**：模型 `wav2vec2-lv-60-espeak-cv-ft` 是 **60 语言多语言词表**（388 符号，含他语言音素如 ʂ/ɴ/β、数字/声调 `i1`/`a4`、标点 `t[`/`u"`）。`build_mapping_from_vocab` 原文 `| set(vocab)` 会把全词表漏入 `ENGLISH_ESPEAK_SYMBOLS`（GOP margin **分母**，被污染则他语言音素可成为 max 竞争者 → 全部 GOP 失真）。修正：**英语子集 = 已映射的词典英语音素值域** `{mapping[s] for s in mapping}`（43 符号，全部 identity——模型 alphabet 用 Unicode IPA，词典符号同形，`_ESPEAK_ASCII_REFERENCE` 未触发）。真机 dump 后人工核对 43 符号全为英语音素、无数字/声调/标点。
+- **映射产物**：`IPA_TO_ESPEAK`（43 项 identity）+ `ENGLISH_ESPEAK_SYMBOLS`（43 英语音素）已回填 `asr_worker/ipa.py`，fixtures 落 `assets/wordbook/ipa-symbols.json`。`ɝ` 未映射（不在模型词表也无 ASCII 参照；当前 4 词未含，将来含 ɝ 的词回退代理或人工补映射）。
+- **CLI 返回码契约**：`0` = ok/partial，`1` = defer，`2` = model_unavailable。
+
 ### 4.4 运行位置裁决
 
 GOP 评分需要 torch 音素模型 + 原始音频。两个候选，**选 asr-worker**：

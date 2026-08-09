@@ -2,10 +2,18 @@
 name = "asr-worker"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["fastapi", "uvicorn", "faster-whisper", "scene-schema"]
+dependencies = ["fastapi", "uvicorn", "faster-whisper", "scene-schema",
+                "torch", "torchaudio", "transformers"]
 
 [tool.uv.sources]
 scene-schema = { workspace = true }
+torch = { index = "pytorch-cpu" }
+torchaudio = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["asr_worker"]

@@ -47,24 +47,29 @@ def load_dictionary_words(asset_root: Path) -> list[tuple[str, str | None]]:
 
 def build_mapping_from_vocab(vocab: dict) -> tuple[dict[str, str], set[str]]:
     """第一遍：词典符号与模型词表同形 → 直接映射；不同形 → 依 _ESPEAK_ASCII_REFERENCE 尝试；
-    仍未解 → 记 unmapped（人工补）。返回 (mapping, english_symbols)。"""
+    仍未解 → 记 unmapped（人工补）。返回 (mapping, english_symbols)。
+    english_symbols = 已映射的词典英语音素值域（GOP margin 分母用）。真机 dump 发现该模型是
+    lv-60 六十语言多语言词表（含数字/声调/其他语言音素），不能 `| set(vocab)` —— 会把
+    非英语音素漏入分母。缺失符号由人工补进 DICT_IPA_SYMBOLS / 映射表。"""
     mapping: dict[str, str] = {}
     for sym in DICT_IPA_SYMBOLS:
         if sym in vocab:
             mapping[sym] = sym
         elif _ESPEAK_ASCII_REFERENCE.get(sym) in vocab:
             mapping[sym] = _ESPEAK_ASCII_REFERENCE[sym]
-    english = {mapping[s] for s in mapping} | set(vocab)
-    # 剔除特殊 token（blank/word 分隔）出英语子集：vocab 中纯音素符号（无 < > [ ] 包裹）
+    english = {mapping[s] for s in mapping}
+    # 防御：剔除任何特殊 token 逃逸（值域应全是音素；blank/分隔符以 < > [ 包裹时）
     english = {s for s in english if not (s.startswith("<") or s.startswith("["))}
     return mapping, english
 
 
 def dump_vocab(model_id: str) -> dict:
-    """dump 模型词表 → {symbol: id}。模型未下载/加载失败 → 抛异常（调用方裁决 model_unavailable）。"""
-    from transformers import Wav2Vec2Processor
-    processor = Wav2Vec2Processor.from_pretrained(model_id)
-    return dict(processor.tokenizer.get_vocab())
+    """dump 模型词表 → {symbol: id}。模型未下载/加载失败 → 抛异常（调用方裁决 model_unavailable）。
+    transformers 5.x 的 Wav2Vec2PhonemeCTCTokenizer 实例化强制要求 phonemizer（本机未装，且本门
+    只需 alphabet 不需文本→音素）；直接读 HF vocab.json 等价于 processor.tokenizer.get_vocab()。"""
+    from huggingface_hub import hf_hub_download
+    vocab_path = hf_hub_download(model_id, "vocab.json")
+    return json.loads(Path(vocab_path).read_text(encoding="utf-8"))
 
 
 def backfill(mapping: dict[str, str], english: frozenset[str], asset_root: Path) -> None:
