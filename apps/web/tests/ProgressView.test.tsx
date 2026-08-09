@@ -9,7 +9,8 @@ const SUMMARY = {
   words: [
     { wordId: 'word_loaf_n_1', lemma: 'loaf', pos: 'n', ipa: '/loʊf/', cefr: 'A2',
       sceneTags: ['bakery'], source: 'quest', carrier: 'object',
-      scores: { productive: 0.7, receptive: 0.5, asrConfidence: 0.6 },
+      scores: { productive: 0.7, receptive: 0.5, asrConfidence: 0.6,
+                asrWordConfidence: 0.9, pronunciation: 0.8 },
       fsrs: { state: 'review', due: '2026-08-09T00:00:00Z', reps: 2, lapses: 0 },
       evidenceCount: 3, lastEvidenceAt: null },
   ],
@@ -34,12 +35,19 @@ describe('ProgressView', () => {
     expect(screen.getByText(/今日到期 1/)).toBeInTheDocument();
   });
 
-  it('shows word-level ASR confidence label', async () => {
+  it('shows Pronunciation GOP label', async () => {
     render(<ProgressView />);
-    await waitFor(() => screen.getByText(/Word-level ASR confidence/));
+    await waitFor(() => screen.getByText(/Pronunciation GOP/));
+    expect(await screen.findByText(/0\.8/)).toBeInTheDocument();
   });
 
-  test('shows word-level ASR confidence label and value', async () => {
+  test('does not show ASR proxy chip in row when pronunciation present', async () => {
+    render(<ProgressView />);
+    await waitFor(() => screen.getByText(/loaf/));
+    expect(screen.queryByText(/Word-level ASR confidence/)).not.toBeInTheDocument();
+  });
+
+  test('shows Pronunciation GOP label and value', async () => {
     global.fetch = vi.fn(async () => ({
       json: async () => ({
         strategy: { evidencePolicyVersion: 'v1', fsrsAlgorithmVersion: 'fsrs-5' },
@@ -48,14 +56,14 @@ describe('ProgressView', () => {
         words: [{
           wordId: 'w1', lemma: 'loaf', pos: 'n', ipa: '/loʊf/', cefr: 'A1',
           sceneTags: [], source: 'quest', carrier: 'object',
-          scores: { productive: 0.6, receptive: 0.5, asrConfidence: 0.0, asrWordConfidence: 0.95 },
+          scores: { productive: 0.6, receptive: 0.5, asrConfidence: 0.0, asrWordConfidence: 0.95, pronunciation: 0.95 },
           fsrs: { state: 'learning', due: null, reps: 0, lapses: 0 },
           evidenceCount: 1, lastEvidenceAt: null,
         }],
       }),
     }) as any);
     render(<ProgressView />);
-    expect(await screen.findByText(/Word-level ASR confidence/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Pronunciation GOP/)).toBeInTheDocument();
     expect(await screen.findByText(/0\.95/)).toBeInTheDocument();
   });
 

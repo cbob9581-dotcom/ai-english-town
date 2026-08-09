@@ -10,7 +10,8 @@ interface WordSummary {
   sceneTags: string[];
   source: string;
   carrier: string | null;
-  scores: { productive: number; receptive: number; asrConfidence: number; asrWordConfidence: number };
+  scores: { productive: number; receptive: number; asrConfidence: number;
+            asrWordConfidence: number; pronunciation: number | null };
   fsrs: { state: string; due: string | null; reps: number; lapses: number };
   evidenceCount: number;
   lastEvidenceAt: string | null;
@@ -167,10 +168,11 @@ export default function ProgressView() {
               {w.cefr && <span style={chipStyle}>{w.cefr}</span>}
               <span style={chipStyle}>{w.source}</span>
               <span style={chipStyle}>证据 {w.evidenceCount}</span>
-              <span style={chipStyle} title="实验性 · 词级对齐 ASR 置信度（非发音评测）">
-                Word-level ASR confidence{' '}
-                {(w.scores.asrWordConfidence ?? w.scores.asrConfidence).toFixed(2)}
-              </span>
+              {w.scores.pronunciation != null && (
+                <span style={chipStyle} title="音素级发音评测（GOP）">
+                  Pronunciation GOP {w.scores.pronunciation.toFixed(2)}
+                </span>
+              )}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -196,7 +198,9 @@ export default function ProgressView() {
                       {ev.axis === 'asr_word_confidence' && (
                         <span style={chipStyle} title="词级对齐时间戳">词级 · {ev.confidence.toFixed(2)}</span>
                       )}
-                      （置信度 {ev.confidence.toFixed(2)}）
+                      {ev.axis !== 'asr_word_confidence' && (
+                        <span>（置信度 {ev.confidence.toFixed(2)}）</span>
+                      )}
                     </div>
                   ))
                 ) : (
