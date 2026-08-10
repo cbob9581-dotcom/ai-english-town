@@ -69,7 +69,8 @@ class LlmSceneDirector:
             async with asyncio.timeout(self._settings.llm_total_timeout_director_s):
                 res = await self._client.complete_json(
                     messages, max_tokens=self._settings.llm_max_tokens_director,
-                    temperature=self._settings.llm_temperature_director)
+                    temperature=self._settings.llm_temperature_director,
+                    read_timeout_s=self._settings.llm_total_timeout_director_s)
             self._llm_log.record(
                 session_id="", generation_id="", role="scene_director",
                 model=self._settings.llm_model, attempt=attempt,

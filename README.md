@@ -53,7 +53,12 @@ uv run python tests/latency/measure.py
 
 ### 阶段 2：LLM（DeepSeek / OpenAI 兼容）
 
-- 环境变量：`DEEPSEEK_API_KEY`（必填才走真模型；不填自动落 mock）、`LLM_BASE_URL`（默认 https://api.deepseek.com）、`LLM_MODEL`（默认 deepseek-chat；拒绝 deepseek-reasoner）
+- 环境变量：`DEEPSEEK_API_KEY`（必填才走真模型；不填自动落 mock）、`LLM_BASE_URL`（默认 https://api.deepseek.com）、`LLM_MODEL`（默认 deepseek-chat；拒绝 deepseek-reasoner）。**密钥只经环境变量注入，切勿写进 settings.py（跟踪文件，提交即泄密）。** 启动 api 示例（PowerShell）：
+  ```powershell
+  $env:DEEPSEEK_API_KEY = "sk-..."
+  $env:LLM_MODEL = "deepseek-v4-flash"   # 可选，按账号可用模型
+  cd apps/api; python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+  ```
 - 离线测试：`MOCK_LLM_SCENARIO=ok|timeout|connect_error|invalid_json|bad_word_id|missing_word|too_long|truncated|empty`（默认 ok）
 - 测量：`uv run --project apps/api python scripts/llm-smoke.py`（真 key，20 次 → tests/fixtures/llm-golden/）
 - 启动自检：`python scripts/startup-selfcheck.py`（含 LLM 探活）

@@ -12,11 +12,15 @@ class Settings:
 
     # --- 阶段 2：LLM（provider 无关，OpenAI 兼容）---
     llm_base_url: str = "https://api.deepseek.com"
-    llm_api_key: str = ""                            # env DEEPSEEK_API_KEY；空 → mock
+    llm_api_key: str = ""                       # env DEEPSEEK_API_KEY；空 → mock
     llm_model: str = "deepseek-chat"
     llm_connect_timeout_s: float = 1.5
     llm_ttft_timeout_s: float = 2.0
-    llm_total_timeout_npc_s: float = 3.0
+    # NPC 回合总预算（墙钟，自 LLM 流开始计）。注意：逐句 TTS 合成发生在 stream_reply
+    # 的 yield 之间，TTS 耗时也计入本预算。真实 LLM TTFT ~2s + 多句 TTS 后，3s（phase-2
+    # mock 时代的数）必然超时 → 回合在 TTS 中被 asyncio.timeout 静默取消，用户听不到回复。
+    # 实测完整回复（~200 字 + 7 段 TTS）约 8s，故默认 15.0 留足余量。
+    llm_total_timeout_npc_s: float = 15.0
     llm_total_timeout_tutor_s: float = 6.0
     llm_max_speech_chars: int = 200
     llm_max_scaffold_chars: int = 120
@@ -24,9 +28,12 @@ class Settings:
     llm_temperature_tutor: float = 0.3
     llm_max_tokens_npc: int = 320
     llm_max_tokens_tutor: int = 320
-    llm_total_timeout_director_s: float = 6.0
+    # Director 非流式 complete_json（真实 DeepSeek）：完整场景 JSON 实测 ~3-6s、可能更长，
+    # read 超时与 asyncio 预算都得覆盖它（mock 时代 6.0s/400tok 会超时或截断 → 场景降级为骨架）。
+    # read_timeout_s 由调用方把本预算传入；fill 在后台跑，骨架立即可见，15s 预算可接受。
+    llm_total_timeout_director_s: float = 15.0
     llm_temperature_director: float = 0.2
-    llm_max_tokens_director: int = 400
+    llm_max_tokens_director: int = 800
     scene_prefetch_ttl_s: float = 60.0
     scene_prefetch_budget_ratio: float = 0.8
     llm_session_call_cap: int = 200

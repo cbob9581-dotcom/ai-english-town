@@ -26,7 +26,12 @@ export default function App() {
   const isProgress = window.location.hash === '#/progress';
   if (isProgress) return <ProgressView />;
   if (error) return <div>加载失败：{error}</div>;
-  if (scene.status === 'idle') return <div>加载中…（需启动 API 8000 + 开始语音连接）</div>;
+  if (scene.status === 'idle') return (
+    <div style={{ padding: 16 }}>
+      <p>加载中…点「开始语音」连接语音、进入场景</p>
+      <button onClick={micOn ? stop : start}>{micOn ? '停止' : '开始语音'}</button>
+    </div>
+  );
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>

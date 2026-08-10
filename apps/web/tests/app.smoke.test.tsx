@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { useSceneStore } from '../src/sceneStore';
@@ -53,6 +53,7 @@ vi.mock('../src/audio/rms-gate', async (importOriginal) => {
 });
 
 afterEach(() => {
+  cleanup();                       // 未开 globals：testing-library 不自动清理，显式清 DOM 防跨用例泄漏
   playedBuffers.length = 0;
   useSceneStore.getState().reset();
   vi.restoreAllMocks();
@@ -78,5 +79,16 @@ describe('App smoke', () => {
     render(<App />);
     expect(screen.getByTestId('scene-viewport')).toBeTruthy();
     expect(screen.getByRole('button', { name: /Tom/i })).toBeTruthy();
+  });
+
+  it('idle 分支渲染「开始语音」按钮，点击即建立连接（防 idle 死锁回归）', async () => {
+    // 守卫：status='idle' 时 App 早期 return 只给占位文本、按钮永远不渲染 → 用户永远无法 start()。
+    // e2e scene.spec 直接 getByText('开始语音').click()，单测此前从未覆盖真实点击流。
+    render(<App />);
+    expect(screen.getByText(/加载中/)).toBeTruthy();
+    const btn = screen.getByRole('button', { name: /开始语音/i });
+    fireEvent.click(btn);          // start()：FakeVoiceSocket.connect + FakeMic.start 均为 no-op
+    // mic 启动后 micOn=true → 按钮翻转为「停止」（status 仍 idle，仍在 idle 分支）
+    await waitFor(() => expect(screen.getByRole('button', { name: /停止/i })).toBeTruthy());
   });
 });

@@ -14,8 +14,10 @@ def test_settings_llm_defaults() -> None:
     assert s.llm_model == "deepseek-chat"
     assert s.llm_connect_timeout_s == 1.5
     assert s.llm_ttft_timeout_s == 2.0
-    assert s.llm_total_timeout_npc_s == 3.0
+    assert s.llm_total_timeout_npc_s == 15.0
     assert s.llm_total_timeout_tutor_s == 6.0
+    assert s.llm_total_timeout_director_s == 15.0
+    assert s.llm_max_tokens_director == 800
     assert s.llm_max_speech_chars == 200
     assert s.llm_max_scaffold_chars == 120
     assert s.llm_temperature_npc == 0.8

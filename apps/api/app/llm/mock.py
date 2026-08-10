@@ -64,7 +64,8 @@ class MockAdapter:
         yield TextDelta(finish_reason="stop", usage={"prompt_tokens": 40, "completion_tokens": 9})
 
     async def complete_json(self, messages: list[dict], *, max_tokens: int,
-                            temperature: float) -> JsonResult:
+                            temperature: float,
+                            read_timeout_s: float | None = None) -> JsonResult:
         if self.scenario == "timeout":
             await asyncio.sleep(60)
         if self.scenario == "connect_error":

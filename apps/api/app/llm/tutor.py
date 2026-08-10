@@ -89,7 +89,8 @@ class CompanionTutor:
             async with asyncio.timeout(self._settings.llm_total_timeout_tutor_s):
                 res = await self._client.complete_json(
                     messages, max_tokens=self._settings.llm_max_tokens_tutor,
-                    temperature=self._settings.llm_temperature_tutor)
+                    temperature=self._settings.llm_temperature_tutor,
+                    read_timeout_s=self._settings.llm_total_timeout_tutor_s)
             validate_tutor(res.json.get("word", ""), res.json.get("scaffold", ""),
                            expected_word=word, max_scaffold_chars=self._settings.llm_max_scaffold_chars)
             scaffold = res.json["scaffold"]

@@ -17,6 +17,12 @@ venv/
 .vscode/
 *.log
 
+# 本地运行/验证产物
+*-server.pid
+.ws-smoke.py
+.scene-probe.py
+apps/api/data/
+
 # SQLite artifacts
 *.db*
 

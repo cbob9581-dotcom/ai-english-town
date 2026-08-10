@@ -40,7 +40,8 @@ class LLMAdapter(Protocol):
                           temperature: float) -> AsyncIterator[TextDelta]: ...
 
     async def complete_json(self, messages: list[dict], *, max_tokens: int,
-                            temperature: float) -> JsonResult: ...
+                            temperature: float,
+                            read_timeout_s: float | None = None) -> JsonResult: ...
 
     async def aclose(self) -> None: ...
 
@@ -50,10 +51,12 @@ class OpenAIClient:
         if settings.llm_model.startswith("deepseek-reasoner"):
             raise ValueError("deepseek-reasoner 不支持 JSON Output；请配置 llm_model=deepseek-chat")
         self._settings = settings
-        # connect=建立连接；read=TTFT 守卫（流式按块读、非流式读响应体）。
-        # httpx 0.28 已移除 total 子超时；角色级总预算（NPC 3s / Tutor 6s）由调用方
-        # （Task 5 asyncio.timeout）强制，客户端不设总超时。以 httpx 默认 5.0 为底，
-        # 仅覆盖 connect/read——write/pool 保持默认，不继承 connect(1.5s)。
+        # connect=建立连接；read=TTFT 守卫——仅对流式（stream_text）按块成立。
+        # 非流式（complete_json）整个响应体一次读完，read=ttft(2.0) 对真实 LLM 必然超时
+        # （完整 JSON 响应实测 ~3-6s）→ 调用方把角色总预算作为 read 超时传入（read_timeout_s，
+        # 见 complete_json/_json_create）；真正的墙钟预算仍由调用方 asyncio.timeout 强制。
+        # httpx 0.28 已移除 total 子超时。以 httpx 默认 5.0 为底，仅覆盖 connect/read——
+        # write/pool 保持默认，不继承 connect(1.5s)。
         timeout = httpx.Timeout(
             5.0,
             connect=settings.llm_connect_timeout_s,
@@ -89,8 +92,13 @@ class OpenAIClient:
         )
 
     async def complete_json(self, messages: list[dict], *, max_tokens: int,
-                            temperature: float) -> JsonResult:
-        resp = await self._retry_connect(self._json_create, messages, max_tokens, temperature)
+                            temperature: float,
+                            read_timeout_s: float | None = None) -> JsonResult:
+        """非流式 JSON 完成。read_timeout_s：非流式响应体一次读完，read 超时须覆盖整段 body
+        （默认 ttft 2.0s 只适合流式按块守卫，真实完整 JSON ~3-6s 必然超时）；
+        调用方把角色总预算传入，None → 用客户端默认（仅测试/流式路径）。"""
+        resp = await self._retry_connect(self._json_create, messages, max_tokens, temperature,
+                                         read_timeout_s)
         content = resp.choices[0].message.content or ""
         try:
             parsed = json.loads(content)
@@ -104,18 +112,25 @@ class OpenAIClient:
             finish_reason=resp.choices[0].finish_reason,
         )
 
-    async def _json_create(self, messages, max_tokens, temperature):
+    async def _json_create(self, messages, max_tokens, temperature, read_timeout_s=None):
         s = self._settings
-        return await self._client.chat.completions.create(
+        kwargs: dict = dict(
             model=s.llm_model, messages=messages, temperature=temperature,
             max_tokens=max_tokens, response_format={"type": "json_object"},
         )
+        if read_timeout_s is not None:
+            # 非流式响应体是一次性读：read 超时须覆盖整段 body（流式的 TTFT 按块守卫不适用）。
+            kwargs["timeout"] = httpx.Timeout(
+                5.0, connect=s.llm_connect_timeout_s, read=read_timeout_s)
+        return await self._client.chat.completions.create(**kwargs)
 
-    async def _retry_connect(self, call, messages, max_tokens, temperature):
+    async def _retry_connect(self, call, messages, max_tokens, temperature, read_timeout_s=None):
         """连接错误 / 瞬时 5xx 重试一次后抛 LLMConnectError；4xx 业务失败不重试、原样上抛。"""
         for attempt in (1, 2):
             try:
-                return await call(messages, max_tokens, temperature)
+                if read_timeout_s is None:  # 流式调用无 read_timeout_s（按块守卫即可）
+                    return await call(messages, max_tokens, temperature)
+                return await call(messages, max_tokens, temperature, read_timeout_s)
             except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadError,
                     httpx.RemoteProtocolError, APIConnectionError) as e:
                 if attempt == 2:
