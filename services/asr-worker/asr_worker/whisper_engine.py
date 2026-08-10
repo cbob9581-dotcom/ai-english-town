@@ -32,15 +32,22 @@ class WhisperEngine:
         )
         segs = []
         words = []
+        # avg_logprob 在 Segment 上而非 TranscriptionInfo（faster-whisper 1.2.x）。
+        # 按 segment 时长加权聚合，对齐 Whisper 全局 mean 语义；静音无 segment → 消费方默认值。
+        logprob = 0.0
+        dur = 0.0
         for s in segments:
             segs.append({"start": s.start, "end": s.end, "text": s.text.strip()})
             if word_timestamps:
                 for w in (s.words or []):
                     words.append({"word": w.word, "start": w.start, "end": w.end,
                                   "probability": w.probability})
+            d = max(s.end - s.start, 0.0)
+            logprob += float(s.avg_logprob) * d
+            dur += d
         out = {"text": " ".join(s["text"] for s in segs).strip(),
                "segments": segs, "language": info.language,
-               "avg_logprob": float(info.avg_logprob)}
+               "avg_logprob": float(logprob / dur) if dur > 0 else -0.5}
         if word_timestamps:
             out["words"] = words
         return out

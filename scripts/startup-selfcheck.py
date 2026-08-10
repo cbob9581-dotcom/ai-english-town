@@ -6,6 +6,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import os
 import subprocess
 import sys
 import time
@@ -32,8 +33,12 @@ def gpu_info() -> dict:
 def run_in(project: str, module: str, *args: str) -> dict:
     # cwd 设为项目目录，确保 python -m 能在该环境里找到本项目的包
     cmd = ["uv", "run", "--project", str(ROOT / project), "-m", module, *args]
+    # uv 子进程默认按 UTF-8 输出（含中文 message，如 llm.probe 的 ensure_ascii=False）；
+    # 父进程 text=True 若按 GBK locale 解码会 UnicodeDecodeError → 强制双方 UTF-8。
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300, cwd=str(ROOT / project))
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                              env=env, timeout=300, cwd=str(ROOT / project))
     except subprocess.TimeoutExpired:
         # 模型缺失且自动下载卡住时（如 faster-whisper 在本机网络挂起），
         # 不 crash，按 error dict 降级（与两个 worker selfcheck 的"绝不 crash"约定一致）。

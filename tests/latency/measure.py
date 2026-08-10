@@ -20,7 +20,7 @@ AUDIO = bytes(1600 * 20)  # 1s @16k 静音（占位；真实测试用录音 WAV�
 
 async def one_round(client: httpx.AsyncClient) -> float:
     t0 = time.perf_counter()
-    r = await client.post(ASR, json={"audioBase64": __import__("base64").b64encode(AUDIO).decode()})
+    r = await client.post(ASR, json={"audio_base64": __import__("base64").b64encode(AUDIO).decode()})
     text = r.json().get("finalText", "")
     t1 = time.perf_counter()
     r2 = await client.post(TTS, json={"text": text or "Hello.", "voice": "af_bella"})
@@ -30,7 +30,7 @@ async def one_round(client: httpx.AsyncClient) -> float:
 
 async def main() -> None:
     async with httpx.AsyncClient(timeout=10.0) as client:
-        await client.post(ASR, json={"audioBase64": __import__("base64").b64encode(AUDIO).decode()})  # 预热
+        await client.post(ASR, json={"audio_base64": __import__("base64").b64encode(AUDIO).decode()})  # 预热
         await client.post(TTS, json={"text": "warmup", "voice": "af_bella"})
         samples = [await one_round(client) for _ in range(30)]
     samples.sort()
