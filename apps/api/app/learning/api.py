@@ -26,10 +26,15 @@ def _now() -> datetime:
 
 @router.post("/word-lists/import")
 def import_words(req: Request, body: dict):
+    """body.words：原有简化格式（["loaf", "bread/n"]），行为不变。
+    body.entries（新增，可选）：富格式，每条可显式指定 carrier/sceneTags/slotCategories，
+    用于词典里没有、但用户明确知道该词应该关联哪个场景/物件槽位的词
+    （例如品牌名、专业术语——词典查不到，简化格式只能落 carrier="phrase" 永远选不中场景实体）。
+    两者可以同时提供，一起导入同一个 list。"""
     eng = _eng(req)
     try:
         res = run_import(eng.store, _dict(req), "local", body.get("words", []),
-                         name=body.get("name"), now=_now())
+                         name=body.get("name"), entries=body.get("entries", []), now=_now())
     except ImportValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
     invalidate_word_id_cache()
