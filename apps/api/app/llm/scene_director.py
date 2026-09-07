@@ -27,6 +27,7 @@ _DIRECTOR_SYSTEM = (
     "If a userIntent field is present, treat it as the learner's stated goal for this scene "
     "and prefer candidates that serve it — but you may ONLY choose from the given candidates, "
     "never invent new ones, even if userIntent asks for something not in the candidate lists. "
+    "Fill the provided propSlots with distinct concepts (do not repeat a concept across slots). "
     "Reply with ONLY a JSON object of this exact shape: "
     '{"fills":[{"slotId":"...","conceptId":"..."}],"characters":[{"slotId":"...","npcId":"..."}],'
     '"setting":{"displayName":"...","time":"..."}}. '

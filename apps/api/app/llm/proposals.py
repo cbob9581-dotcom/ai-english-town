@@ -70,6 +70,7 @@ def validate_proposal(proposal: dict, archetype: dict, catalog) -> tuple[dict, l
 
     warnings: list[str] = []
     ok_fills: list[dict] = []
+    seen_concepts: set[str] = set()   # 同一概念全场景只允许一次：防 LLM 多槽放相同道具（重复）
     for f in fills:
         slot = f.get("slotId")
         concept_id = f.get("conceptId")
@@ -80,6 +81,10 @@ def validate_proposal(proposal: dict, archetype: dict, catalog) -> tuple[dict, l
         if concept_id not in candidates:
             warnings.append(f"concept {concept_id!r} not in slot {slot} candidates")
             continue
+        if concept_id in seen_concepts:
+            warnings.append(f"duplicate concept {concept_id!r} in slot {slot} dropped")
+            continue
+        seen_concepts.add(concept_id)
         ok_fills.append({"slotId": slot, "conceptId": concept_id})
 
     ok_chars: list[dict] = []
