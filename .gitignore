@@ -33,3 +33,4 @@ voices-v1.0.bin
 # 环境与密钥
 .env
 .env.*
+!.env.example

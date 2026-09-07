@@ -2,6 +2,28 @@ from dataclasses import dataclass
 import os
 from pathlib import Path
 
+_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
+
+
+def _load_env_file() -> None:
+    """极简 .env 加载（无第三方依赖）：逐行 KEY=VALUE；已存在的环境变量优先。
+    供 Settings.from_env() 使用，可用 apps/api/.env 固化本地配置（含密钥，不入库，
+    见 .gitignore 的 .env 规则）。"""
+    try:
+        text = _ENV_FILE.read_text(encoding="utf-8")
+    except OSError:
+        return
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        # 已有非空环境变量优先；仅在当前缺失或为空（含空串遮蔽）时用 .env 填充。
+        if key and value and not os.environ.get(key):
+            os.environ[key] = value
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -104,6 +126,7 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
+        _load_env_file()
         kw: dict = {}
         base = cls()
         for field, env_name in cls._ENV_FIELDS.items():
