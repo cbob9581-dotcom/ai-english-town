@@ -21,11 +21,14 @@ class LearningEngine:
         # 并发由 events.write_lock 提供（sequence 分配与提交同锁）
 
     # ---- 选词 ----
-    def pick_scene_words(self, archetype_id: str, archetype: dict, now: datetime) -> dict[str, str]:
+    def pick_scene_words(self, archetype_id: str, archetype: dict, now: datetime,
+                         *, mode: str = "goal") -> dict[str, str]:
+        """mode="goal"（默认）：FSRS 主导选词，goal_list 来源优先。
+        mode="free"：大幅降低 FSRS 存在感，见 scheduler.pick() 的 free 分支。"""
         words = self.store.list_items_by_scene("local", archetype_id)
         slots = sched_mod.scene_prop_slot_categories(archetype)
         chosen = sched_mod.pick(words, archetype_id=archetype_id, now=now,
-                                slot_categories=slots, limit=7)
+                                slot_categories=slots, limit=7, mode=mode)
         out: dict[str, str] = {}
         for w in words:
             if w["word_id"] in chosen:

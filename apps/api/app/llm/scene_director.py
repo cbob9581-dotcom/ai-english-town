@@ -1,5 +1,11 @@
 """SceneDirector：把原型 + 候选概念目录 → 提案 ScenePlan。
-persona/wordId 永不由本模块产生；只选 conceptId/npcId 与 setting（ASCII ≤24）。"""
+persona/wordId 永不由本模块产生；只选 conceptId/npcId 与 setting（ASCII ≤24）。
+
+MODE FEATURE: 新增 user_intent —— 用户在进场前用自然语言表达的需求/期望
+（例如 "I want to practice ordering coffee" 或 "focus on words from my list"）。
+Free Mode 下这就是唯一的方向信号；Goal-Oriented Mode 下它与 FSRS 选出的目标词并存，
+用来影响 Director 在候选范围内怎么挑，而不是绕过候选范围（候选仍然是唯一合法来源，
+proposals.py 的校验边界不变——user_intent 只影响"选哪个"，不产生新候选）。"""
 from __future__ import annotations
 
 import asyncio
@@ -13,9 +19,14 @@ from app.learning.memory import format_world_summary
 from app.llm.client import JsonParseError, LLMAdapter, LLMConnectError
 from app.settings import Settings
 
+_MAX_USER_INTENT_CHARS = 200
+
 _DIRECTOR_SYSTEM = (
     "You are a scene director for an English-learning town. A scene template has slots; "
     "you choose what to place from the provided candidates. "
+    "If a userIntent field is present, treat it as the learner's stated goal for this scene "
+    "and prefer candidates that serve it — but you may ONLY choose from the given candidates, "
+    "never invent new ones, even if userIntent asks for something not in the candidate lists. "
     "Reply with ONLY a JSON object of this exact shape: "
     '{"fills":[{"slotId":"...","conceptId":"..."}],"characters":[{"slotId":"...","npcId":"..."}],'
     '"setting":{"displayName":"...","time":"..."}}. '
@@ -25,10 +36,19 @@ _DIRECTOR_SYSTEM = (
 )
 
 
+def _sanitize_user_intent(user_intent: str | None) -> str | None:
+    """裁剪 + 去换行；不做 ASCII 强制（自由文本，非 LLM 输出，proposals.py 的
+    ASCII 校验只管 LLM 的 setting.displayName，这里不适用）。空/纯空白 → None。"""
+    if not user_intent:
+        return None
+    cleaned = " ".join(user_intent.split())[:_MAX_USER_INTENT_CHARS]
+    return cleaned or None
+
+
 class SceneDirector(Protocol):
     async def propose(self, *, archetype_id: str, archetype: dict, catalog,
                       recent_scenes: list[str], world_summary: dict | None = None,
-                      attempt: str = "enter") -> dict: ...
+                      attempt: str = "enter", user_intent: str | None = None) -> dict: ...
 
 
 class LlmSceneDirector:
@@ -38,7 +58,8 @@ class LlmSceneDirector:
         self._llm_log = llm_log
 
     def _build_messages(self, archetype: dict, catalog, recent_scenes: list[str],
-                        world_summary: dict | None = None) -> list[dict]:
+                        world_summary: dict | None = None,
+                        user_intent: str | None = None) -> list[dict]:
         slots = []
         for s in archetype["propSlots"]:
             slots.append({"slotId": s["slotId"], "zone": s["zone"],
@@ -55,6 +76,9 @@ class LlmSceneDirector:
         block = format_world_summary(world_summary)
         if block:
             payload["worldSummary"] = block
+        intent = _sanitize_user_intent(user_intent)
+        if intent:
+            payload["userIntent"] = intent
         return [
             {"role": "system", "content": _DIRECTOR_SYSTEM},
             {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
@@ -62,9 +86,9 @@ class LlmSceneDirector:
 
     async def propose(self, *, archetype_id: str, archetype: dict, catalog,
                       recent_scenes: list[str], world_summary: dict | None = None,
-                      attempt: str = "enter") -> dict:
+                      attempt: str = "enter", user_intent: str | None = None) -> dict:
         t0 = time.perf_counter()
-        messages = self._build_messages(archetype, catalog, recent_scenes, world_summary)
+        messages = self._build_messages(archetype, catalog, recent_scenes, world_summary, user_intent)
         try:
             async with asyncio.timeout(self._settings.llm_total_timeout_director_s):
                 res = await self._client.complete_json(

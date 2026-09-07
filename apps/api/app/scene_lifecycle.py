@@ -44,10 +44,16 @@ def recent_scenes(events, session_id: str, limit: int = 5) -> list[str]:
 
 
 async def enter_scene(app, events, state, session_id, send, *,
-                      target_archetype_id: str | None, source: str) -> None:
-    """切入目标场景：取消旧回合/填充 → 编译骨架 → 广播 skeleton → 触发填充（Task 6 前无填充）。"""
+                      target_archetype_id: str | None, source: str,
+                      mode: str | None = None,
+                      user_intent: str | None = None) -> None:
+    """切入目标场景：取消旧回合/填充 → 编译骨架 → 广播 skeleton → 触发填充（Task 6 前无填充）。
+    MODE FEATURE：mode/user_intent 用于 Free vs Goal-Oriented 选词与 Director 填充；
+    显式参数优先，缺省回落到 state.mode / state.user_intent（ws.py 的 session.config 已设置）。"""
     scenes = app.state.scenes
     target = target_archetype_id or scenes.load_town_map()["start"]
+    state.mode = mode or getattr(state, "mode", "goal")
+    state.user_intent = user_intent if user_intent is not None else getattr(state, "user_intent", None)
     await _cancel_work(app, events, state, session_id)
 
     state.scene_seq += 1
@@ -70,7 +76,7 @@ async def enter_scene(app, events, state, session_id, send, *,
     if learning:
         try:
             chosen = learning.pick_scene_words(target, scenes.get_archetype(target),
-                                               datetime.now(timezone.utc))
+                                               datetime.now(timezone.utc), mode=state.mode)
             state.target_word_ids = set(chosen)
             state.scene_words = {**scene_words, **chosen}   # 选词补充无场景实体的词
         except Exception:  # noqa: BLE001 —— 选词失败退化为无目标词（不杀进场）
@@ -156,7 +162,8 @@ async def fill_scene(app, events, state, session_id, send, *,
                     catalog=app.state.catalog,
                     recent_scenes=recent_scenes(events, session_id),
                     world_summary=mem.get_world_summary("local") if mem else None,
-                    attempt="enter")
+                    attempt="enter",
+                    user_intent=getattr(state, "user_intent", None))
         cleaned, _warnings = validate_proposal(proposal, scenes.get_archetype(archetype_id), app.state.catalog)
         app.state.prefetch.put(archetype_id, revision, cleaned)      # 供下次访问（进入即命中）
         filled = scenes.compile_filled(archetype_id, scene_id=scene_id, seed=seed,

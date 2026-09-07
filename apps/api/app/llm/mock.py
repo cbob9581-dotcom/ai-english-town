@@ -113,7 +113,8 @@ class MockSceneDirector:
 
     async def propose(self, *, archetype_id: str, archetype: dict, catalog,
                       recent_scenes: list[str], world_summary: dict | None = None,
-                      attempt: str = "enter") -> dict:
+                      attempt: str = "enter", user_intent: str | None = None) -> dict:
+        # MODE FEATURE：接收但忽略 user_intent —— mock 不按意图填充，只做确定性故障注入。
         if self.scenario == "timeout":
             await asyncio.sleep(60)                       # 外层 director timeout 取消它
         if self.scenario == "connect_error":

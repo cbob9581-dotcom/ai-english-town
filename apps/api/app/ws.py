@@ -1,5 +1,18 @@
 """浏览器实时连接：音频二进制 + 控制 JSON。回合跑独立 asyncio 任务（可取消）；
-playbackState + barge-in + spurious 守卫 + append-only 打断 + 双端过期丢弃（服务端侧）。"""
+playbackState + barge-in + spurious 守卫 + append-only 打断 + 双端过期丢弃（服务端侧）。
+
+MODE FEATURE: SessionState 新增 mode（"free"|"goal"，默认 "goal"，等同原行为）与
+user_intent（用户进场前用自然语言表达的需求）。新增 "session.config" 控制消息类型，
+供前端在进场前（或换场景前）设置这两项；两者被转发进 enter_scene()（scene_lifecycle.py）
+与 _prefetch_for() 的 director.propose() 调用。
+
+⚠️ 集成缺口：enter_scene()（app/scene_lifecycle.py）目前签名是
+    enter_scene(app, events, state, session_id, send, target_archetype_id=None, source="connect")
+需要新增 mode/user_intent 形参，并在内部：
+  1) 调 engine.pick_scene_words(archetype_id, archetype, now, mode=mode) 而非无 mode 版本；
+  2) 调 app.state.director.propose(..., user_intent=user_intent) 而非无 user_intent 版本。
+本文件已经把 state.mode/state.user_intent 传到调用点，但 scene_lifecycle.py 本身未随本次
+改动同步（未拿到该文件内容，不敢盲改）——请把 scene_lifecycle.py 贴给我，我再补上那两处。"""
 from __future__ import annotations
 
 import asyncio
@@ -17,6 +30,8 @@ from app.settings import Settings
 from app.voice_round import run_round
 
 router = APIRouter()
+
+_MAX_USER_INTENT_CHARS = 200
 
 
 class SessionState:
@@ -43,6 +58,9 @@ class SessionState:
         self.semaphore = asyncio.Semaphore(settings.llm_concurrency_limit)
         self.spurious_window_s = 0.5
         self._turn_seq = 0
+        # --- Free vs Goal-Oriented mode ---
+        self.mode: str = "goal"                 # "free" | "goal"；默认等同原行为
+        self.user_intent: str | None = None     # 用户进场前表达的需求，见 session.config
 
     @property
     def generation_id(self) -> str:
@@ -74,7 +92,8 @@ async def ws_session(ws: WebSocket) -> None:
         replayed = rebuild_from_events(app, events, state, session_id, send)
         if not replayed:
             await enter_scene(app, events, state, session_id, send,
-                              target_archetype_id=None, source="connect")
+                              target_archetype_id=None, source="connect",
+                              mode=state.mode, user_intent=state.user_intent)
 
     async def _spurious_guard() -> None:
         try:
@@ -281,7 +300,8 @@ async def ws_session(ws: WebSocket) -> None:
                         archetype_id=archetype_id,
                         archetype=app.state.scenes.get_archetype(archetype_id),
                         catalog=app.state.catalog,
-                        recent_scenes=[], world_summary=world_summary, attempt="prefetch")
+                        recent_scenes=[], world_summary=world_summary, attempt="prefetch",
+                        user_intent=state.user_intent)
             app.state.prefetch.put(archetype_id, revision, proposal)
         except Exception:  # noqa: BLE001 —— 预取失败（含超时）静默（下次正常进场再 Director）
             return
@@ -324,13 +344,25 @@ async def ws_session(ws: WebSocket) -> None:
                     await _handle_companion_ask(ctrl.get("entityId"))
                 elif t == "entity.click":
                     await _handle_entity_click(ctrl.get("entityId"))
+                elif t == "session.config":
+                    # MODE FEATURE: 前端在进场前（或换场景前）设置 mode/userIntent。
+                    # 不校验 mode 取值范围以外的字符串 —— 下游 scheduler.pick() 未知 mode
+                    # 会落到 else 分支按 "goal" 处理（安全默认），不会崩溃。
+                    incoming_mode = ctrl.get("mode")
+                    if isinstance(incoming_mode, str):
+                        state.mode = incoming_mode
+                    intent = ctrl.get("userIntent")
+                    if isinstance(intent, str):
+                        cleaned = " ".join(intent.split())[:_MAX_USER_INTENT_CHARS]
+                        state.user_intent = cleaned or None
                 elif t == "scene.request":
                     if state.scene is None:
                         continue
                     target = app.state.scenes.target_for(state.scene.archetype_id, ctrl.get("exitId"))
                     if target:
                         await enter_scene(app, events, state, session_id, send,
-                                          target_archetype_id=target, source="exit")
+                                          target_archetype_id=target, source="exit",
+                                          mode=state.mode, user_intent=state.user_intent)
                         _maybe_spawn_prefetch(app, state, session_id,
                                               app.state.scenes.load_town_map()["start"])
                 elif t == "scene.hint":
