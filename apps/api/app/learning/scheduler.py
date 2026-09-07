@@ -3,18 +3,24 @@ seed = sha1(f"scene-select:{archetype_id}:{now.date().isoformat()}")（sceneId �
 
 MODE FEATURE:
 - mode="goal"（默认，等同旧行为）：due[:3] + new[:3] + weak[0] + 补齐，其中 due/new 优先取
-  source="goal_list" 的词（用户上传词表导入的目标词），耗尽后再取其余来源，兑现
-  "goal-oriented mode 优先推进用户自己设定的目标"。
+  source="quest" 的词（用户上传词表导入的目标词，见 store.import_words 的默认 source），
+  耗尽后再取其余来源，兑现 "goal-oriented mode 优先推进用户自己设定的目标"。
 - mode="free"：大幅降低 FSRS 排期的存在感——只留 1 个到期复习位（不挤占场景，
   维持轻量间隔重复），不强制填新词/薄弱词。场景大部分内容应由 Free Mode 下的
-  user_intent（见 scene_director.py）和随手问companion的 spontaneous encounter
-  流程（encounters.py）驱动，而不是被 FSRS 主导。"""
+  user_intent（见 scene_director.py）和随手问 companion 的 spontaneous encounter
+  流程（encounters.py）驱动，而不是被 FSRS 主导。
+
+⚠️ FIX：words 行来自 store.list_items_by_scene()，行对象是 sqlite3.Row（不是 dict），
+没有 .get() 方法，且用字符串 key 取不存在的列时抛 IndexError（不是 KeyError）。
+_source_of() 用 try/except 同时兼容 Row 与测试里手搭的 plain dict。"""
 from __future__ import annotations
 
 import hashlib
 import json
 import random
 from datetime import datetime
+
+GOAL_SOURCE = "quest"  # 对齐 store.import_words() 的默认导入来源
 
 
 def scene_prop_slot_categories(archetype: dict) -> set[str]:
@@ -25,11 +31,19 @@ def _seed_int(key: str) -> int:
     return int.from_bytes(hashlib.sha1(key.encode()).digest()[:4], "big")
 
 
-def _split_goal_first(rows: list[dict]) -> tuple[list[dict], list[dict]]:
-    """把 source="goal_list" 的行排到前面（保持各自内部原有顺序），
+def _source_of(w) -> str | None:
+    """兼容 sqlite3.Row（无 .get()，缺列抛 IndexError）与测试用的 plain dict（缺列抛 KeyError）。"""
+    try:
+        return w["source"]
+    except (KeyError, IndexError):
+        return None
+
+
+def _split_goal_first(rows: list) -> tuple[list, list]:
+    """把 source="quest"（用户上传词表）的行排到前面（保持各自内部原有顺序），
     用于 goal 模式下优先耗尽用户自己上传的目标词。"""
-    goal = [w for w in rows if w.get("source") == "goal_list"]
-    rest = [w for w in rows if w.get("source") != "goal_list"]
+    goal = [w for w in rows if _source_of(w) == GOAL_SOURCE]
+    rest = [w for w in rows if _source_of(w) != GOAL_SOURCE]
     return goal, rest
 
 
@@ -57,7 +71,7 @@ def pick(words: list[dict], *, archetype_id: str, now: datetime,
         chosen = [w["word_id"] for w in due[:1]]
         return chosen[:limit]
 
-    # mode == "goal"（默认）：due/new 各自把 goal_list 排到前面优先耗尽
+    # mode == "goal"（默认）：due/new 各自把 source="quest" 排到前面优先耗尽
     due_goal, due_rest = _split_goal_first(due)
     new_goal, new_rest = _split_goal_first(new)
     due_ordered = due_goal + due_rest
