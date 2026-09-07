@@ -11,7 +11,15 @@ class PcmCollector extends AudioWorkletProcessor {
       const pos = i * ratio; const i0 = Math.floor(pos); const i1 = Math.min(i0 + 1, this.buf.length - 1);
       out[i] = this.buf[i0] * (1 - (pos - i0)) + this.buf[i1] * (pos - i0);
     }
-    this.buf = this.buf.slice(this.buf.length % Math.max(1, Math.round(ratio)));
+    // FIX: discard the input samples that were actually consumed to produce `out`
+    // (out.length * ratio of them), keeping only the small fractional leftover tail.
+    // The old code did `this.buf.length % Math.round(ratio)`, which for an exact 3:1
+    // ratio is almost always 0-2, so it kept nearly the *entire* buffer every call —
+    // the buffer grew unboundedly and every process() call re-sent the whole
+    // utterance again from the start, duplicating audio and corrupting anything
+    // sent to ASR.
+    const consumed = Math.floor(out.length * ratio);
+    this.buf = this.buf.slice(consumed);
     // 发送成块
     for (let i = 0; i < out.length; i += 320) {
       const frame = out.subarray(i, Math.min(i + 320, out.length));

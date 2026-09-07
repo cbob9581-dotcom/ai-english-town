@@ -12,6 +12,7 @@ interface CompanionState { word: string; scaffold: string; }
 
 export function useVoiceRound(sessionId: string, wsUrl: string) {
   const [micOn, setMicOn] = useState(false);
+  const [micError, setMicError] = useState<string | null>(null);
   const [status, setStatus] = useState('idle');
   const [turns, setTurns] = useState<Turn[]>([]);
   const [companion, setCompanion] = useState<CompanionState | null>(null);
@@ -91,6 +92,8 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
   };
 
   const start = async () => {
+    setMicError(null);
+    try {
     const sock = new VoiceSocket(sessionId);
     await sock.connect(wsUrl);
     socketRef.current = sock;
@@ -199,6 +202,11 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
     await mic.start();
     micRef.current = mic;
     setMicOn(true);
+    } catch (err) {
+      setMicError(err instanceof Error ? err.message : String(err));
+      socketRef.current?.close();
+      socketRef.current = null;
+    }
   };
 
   const beginUtterance = () => {
@@ -247,5 +255,5 @@ export function useVoiceRound(sessionId: string, wsUrl: string) {
     socketRef.current?.sendControl({ type: 'npc.focus', sceneId: useSceneStore.getState().sceneId, generationId: useSceneStore.getState().generationId, characterId: npcId });
   };
 
-  return { micOn, status, turns, companion, lastGesture, discovered, toggleDiscover, start, stop, beginUtterance, interrupt, askCompanion, entityClick, requestScene, hintScene, focusNpc };
+  return { micOn, micError, status, turns, companion, lastGesture, discovered, toggleDiscover, start, stop, beginUtterance, interrupt, askCompanion, entityClick, requestScene, hintScene, focusNpc };
 }
